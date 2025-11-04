@@ -323,7 +323,7 @@ graph TB
            ⏰ SCHEDULED RUNS          │ (AI/QA)  │           └──────────┘
            ═══════════════           └──────────┘                 │
                                             │                     ▼
-    Daily 5:00 AM UTC ────▶ LISTINGS        │               ┌──────────┐
+    Daily 00:05 UTC ────▶ LISTINGS        │               ┌──────────┐
     Sequential After  ────▶ OHLCV           │               │   DMV    │
     Sequential After  ────▶ ANALYSIS        │               │   CORE   │
     Manual/On-Demand  ────▶ QA              ▼               └──────────┘
@@ -412,7 +412,7 @@ crypto_listings_latest_1000   # CoinMarketCap listings data
 
 | Stage | Module | Trigger | Avg Time | Success Rate | Data Volume |
 |:-----:|:------:|:-------:|:--------:|:------------:|:-----------:|
-| **1️⃣ LISTINGS** | `cmc_listings.py` | Daily 5:00 AM UTC | ~45s | 99.8% | 1000 coins |
+| **1️⃣ LISTINGS** | `cmc_listings.py` | Daily 00:05 UTC | ~45s | 99.8% | 1000 coins |
 | **2️⃣ OHLCV** | `gcp_108k_1kcoins.R` | After Stage 1 | ~8min | 99.5% | 108K records |
 | **3️⃣ DMV** | 8 TA Scripts | After Stage 2 | ~12min | 99.7% | 100+ indicators |
 | **4️⃣ QA** | `prod_qa_dbcp.py` | Manual/On-demand | ~30s | 100% | Full DB scan |
@@ -520,7 +520,7 @@ crypto_listings_latest_1000   # CoinMarketCap listings data
 <summary><b>🔍 Click to expand Stage 1: LISTINGS details</b></summary>
 
 #### Stage 1: LISTINGS
-- **Trigger**: `cron: '05 0 * * *'` (Daily 5:00 AM UTC)
+- **Trigger**: `cron: '05 0 * * *'` (Daily 00:05 UTC)
 - **Module**: [cmc_listings.py](gcp_postgres_sandbox/data_ingestion/cmc_listings.py)
 - **Purpose**: Fetch top 1000 cryptocurrencies from CoinMarketCap API
 - **Output**: Updated `crypto_listings_latest_1000` table
