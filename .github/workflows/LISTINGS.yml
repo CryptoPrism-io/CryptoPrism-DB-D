@@ -2,7 +2,7 @@ name: LISTINGS
 
 on:
   schedule:
-# Run every day at 5 AM UTC
+# Run every day at 00:05 UTC
     - cron: '05 0 * * *'
   
   # Allow manual triggering for testing
@@ -49,3 +49,4 @@ jobs:
     
     - name: Log completion
       run: echo "Crypto data fetch completed at $(date)"
+

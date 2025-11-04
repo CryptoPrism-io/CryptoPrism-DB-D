@@ -108,7 +108,7 @@ graph TD
 
 ---
 
-## ⏰ Time Zone Conversion Reference
+## 🌍 Time Zone Conversion Reference
 
 ### Common UTC to IST Conversions
 | UTC Time | IST Time | Description |
@@ -198,59 +198,3 @@ QA_Telegram (Quality Assurance) [Manual]
 ### Quality Assurance Scripts:
 - `quality_assurance/prod_qa_dbcp.py` → **QA_Telegram** workflow (active)
 - `quality_assurance/prod_qa_cp_ai.py` → **QA_Telegram** workflow (commented)
-- `quality_assurance/prod_qa_cp_ai_backtest.py` → **QA_Telegram** workflow (commented)
-- `quality_assurance/prod_qa_dbcp_backtest.py` → **QA_Telegram** workflow (commented)
-
-### Testing Scripts:
-- `tests/functional_tests/env_test.py` → **Environment Test (Python)** workflow
-- `tests/functional_tests/env_test.R` → **Environment Test (R)** workflow
-
-### Backtesting Scripts:
-- `backtesting/gcp_dmv_mom_backtest.py` → Not currently in automated workflows
-- `backtesting/test_backtest_mom_data.py` → Not currently in automated workflows
-
----
-
-## 🔄 Maintenance Guidelines
-
-### When to Update This Documentation:
-1. **Workflow Schedule Changes** - Update CRON expressions and timing
-2. **New Workflows Added** - Add to schedule table and pipeline flow
-3. **Script Relocations** - Update script-to-workflow mappings
-4. **Dependency Changes** - Modify pipeline flow diagram
-5. **Manual Trigger Changes** - Update `workflow_dispatch` availability
-
-### Maintenance Process:
-1. **Identify Changes**: Review workflow YAML files for modifications
-2. **Update Tables**: Modify schedule reference and script mapping tables
-3. **Verify Timing**: Recalculate UTC to IST conversions if needed
-4. **Test Documentation**: Ensure all links and references work
-5. **Version Control**: Update CHANGELOG.md with documentation changes
-
-### Related Documentation:
-- **CHANGELOG.md** - Version history including workflow changes
-- **CLAUDE.md** - Technical implementation details
-- **README.md** - High-level system overview
-
----
-
-## ⚠️ Important Notes
-
-### Pipeline Reliability:
-- **Sequential Dependencies**: OHLCV will not run if LISTINGS fails
-- **Error Handling**: Each workflow stops on failure (`continue-on-error: false`)
-- **Retry Mechanism**: Manual re-runs required for failures
-
-### Development Considerations:
-- **TEST_DEV** workflow ensures development branch stability
-- **Environment tests** validate system health independently
-- **Manual QA** allows on-demand quality assurance checks
-
-### Security:
-- All workflows use `testsecrets` environment for credential management
-- No sensitive data is exposed in workflow logs
-- Telegram notifications provide real-time monitoring
-
----
-
-*Last Updated: 2025-09-05 | Maintained as part of CryptoPrism-DB documentation*

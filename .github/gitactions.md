@@ -63,7 +63,7 @@ This document provides an overview of the GitHub Actions workflows defined in th
 ## 6. **LISTINGS.yml**
 - **Purpose**: Fetches cryptocurrency listings data daily.
 - **Triggers**:
-  - Scheduled: Every day at 5:00 AM UTC.
+  - Scheduled: Every day at **00:05 UTC** (cron: `05 0 * * *`).
   - Manual trigger (`workflow_dispatch`).
 - **Key Steps**:
   - Sets up Python environment and installs dependencies.
