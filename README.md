@@ -112,7 +112,7 @@
 
 ### Automated Pipeline System
 - **4-Stage Sequential Pipeline** - LISTINGS → OHLCV → DMV → QA
-- **Daily Automation** - Runs at 5:00 AM UTC via GitHub Actions
+- **Daily Automation** - Runs daily at **00:05 UTC** via GitHub Actions (workflow `.github/workflows/LISTINGS.yml` uses `cron: '05 0 * * *'`)
 - **Multi-Language Integration** - Python + R script orchestration
 - **Error Handling** - Pipeline stops on failure with detailed logging
 - **Quality Assurance** - AI-powered monitoring with real-time alerts
