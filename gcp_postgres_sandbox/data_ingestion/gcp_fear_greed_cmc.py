@@ -1,7 +1,7 @@
 import requests
 import json
 import pandas as pd
-from datetime import datetime, timedelta
+
 from sqlalchemy import create_engine, text
 import os
 import logging
@@ -71,8 +71,8 @@ def fetch_fear_and_greed_data(api_key, limit=500, start=1):
         return None
 
 
-def fetch_full_year_data(api_key):
-    """ Fetches Fear & Greed data for 1 year using pagination. """
+def fetch_all_data(api_key):
+    """ Fetches all available Fear & Greed historical data using pagination (back to Feb 2018). """
     all_data = []
     start = 1  # Start index for pagination
     limit = 500  # Max per request
@@ -85,15 +85,7 @@ def fetch_full_year_data(api_key):
         all_data.extend(data["data"])
         start += limit  # Move to the next batch
 
-        # Convert first and last timestamp to check if we reached 1 year
-        timestamps = [int(entry["timestamp"]) for entry in data["data"]]
-        first_date = datetime.utcfromtimestamp(timestamps[0])
-        last_date = datetime.utcfromtimestamp(timestamps[-1])
-        one_year_ago = datetime.utcnow() - timedelta(days=365)
-
-        if last_date < one_year_ago:
-            break  # Stop fetching if we have 1 year of data
-
+    logger.info(f"Fetched {len(all_data)} total Fear & Greed records.")
     return all_data
 
 
@@ -103,7 +95,6 @@ def process_fear_greed_data(data):
         df = pd.DataFrame(data)
         df["timestamp"] = pd.to_datetime(df["timestamp"].astype(int), unit="s")
         df.rename(columns={"value": "fear_greed_index", "value_classification": "sentiment"}, inplace=True)
-        df = df[df["timestamp"] >= datetime.utcnow() - timedelta(days=365)]  # Keep only last 1 year
         return df
     else:
         return pd.DataFrame()
@@ -123,7 +114,7 @@ def push_data_to_db(df, table_name="FE_FEAR_GREED_CMC"):
 
 if __name__ == "__main__":
     api_key = API_KEY
-    full_year_data = fetch_full_year_data(api_key)
+    full_year_data = fetch_all_data(api_key)
     df = process_fear_greed_data(full_year_data)
 
     if not df.empty:
