@@ -29,26 +29,24 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_PORT = os.getenv("DB_PORT", "5432")  # Default to 5432 if not set
 DB_NAME = os.getenv("DB_NAME", "dbcp")  # Default database
 DB_NAME_BT = os.getenv("DB_NAME_BT", "cp_backtest")  # Backtest database
+API_KEY = os.getenv("CMC_API_KEY")
 
 # Validate required environment variables
 missing_vars = [var for var in ["DB_HOST", "DB_USER", "DB_PASSWORD", "API_KEY"] if not globals()[var]]
 if missing_vars:
-    logger.error(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-    raise SystemExit("❌ Terminating: Missing required credentials.")
+    logger.error(f"Missing environment variables: {', '.join(missing_vars)}")
+    raise SystemExit("Terminating: Missing required credentials.")
 
 # Log only necessary info (DO NOT log DB_PASSWORD for security)
-logger.info(f"✅ Database Configuration Loaded: DB_HOST={DB_HOST}, DB_PORT={DB_PORT}")
+logger.info(f"Database Configuration Loaded: DB_HOST={DB_HOST}, DB_PORT={DB_PORT}")
 
-# 🔹 Create SQLAlchemy Engine
+# Create SQLAlchemy Engine
 def create_db_engine():
     return create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}')
 
-# 🔹 Create SQLAlchemy Engine for Backtest Database
+# Create SQLAlchemy Engine for Backtest Database
 def create_db_engine_backtest():
     return create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME_BT}')
-
-# API Key - loaded from environment (CMC_API_KEY secret in GitHub Actions, or .env locally)
-API_KEY = os.getenv("CMC_API_KEY")
 
 def fetch_fear_and_greed_data(api_key, limit=500, start=1):
     """ Fetches paginated Fear & Greed Index data from the API. """
