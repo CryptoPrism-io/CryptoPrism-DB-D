@@ -6,6 +6,22 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.1] - 2026-03-02 10:00:00 UTC
+
+### Fixed
+- **DMV workflow failing daily** (`gcp_fear_greed_cmc.py`) - Root cause: `engine.connect()` used with `df.to_sql(..., if_exists="replace")` in SQLAlchemy 2.x + pg8000. The `engine.connect()` autobegin creates an implicit transaction; pandas `to_sql` with `if_exists="replace"` internally runs DROP TABLE then tries to commit, but pg8000 raises `InterfaceError: in failed transaction block` because DDL inside an uncommitted transaction conflicts with pg8000 state management. Fix: replaced `engine.connect()` with `engine.begin()` which explicitly manages the transaction lifecycle (auto-commit on success, auto-rollback on error).
+  - File: `gcp_postgres_sandbox/data_ingestion/gcp_fear_greed_cmc.py` line 117
+
+### Security
+- **Removed hardcoded CMC API key** from `gcp_fear_greed_cmc.py`. The key `92a8ca59-...` was hardcoded in source as `API_KEY` while the workflow already passes `CMC_API_KEY` as a GitHub Secret. Changed to `os.getenv("CMC_API_KEY")` and added it to the missing-vars validation guard.
+  - File: `gcp_postgres_sandbox/data_ingestion/gcp_fear_greed_cmc.py` lines 51, 34
+
+### Impact Analysis
+- DMV workflow has been failing every day since at least 2026-02-26 (5+ consecutive failures, all at the first step)
+- All 7 subsequent DMV steps were never reached due to `continue-on-error: false`
+- Fix is minimal and surgical — one-line change to transaction context manager
+- Risk: Low. `engine.begin()` is the recommended SQLAlchemy 2.x pattern for write operations
+
 ## [4.4.0] - 2025-10-25 14:30:00 UTC
 
 ### Added

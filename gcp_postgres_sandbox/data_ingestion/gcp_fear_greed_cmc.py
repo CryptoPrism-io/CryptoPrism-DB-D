@@ -31,7 +31,7 @@ DB_NAME = os.getenv("DB_NAME", "dbcp")  # Default database
 DB_NAME_BT = os.getenv("DB_NAME_BT", "cp_backtest")  # Backtest database
 
 # Validate required environment variables
-missing_vars = [var for var in ["DB_HOST", "DB_USER", "DB_PASSWORD"] if not globals()[var]]
+missing_vars = [var for var in ["DB_HOST", "DB_USER", "DB_PASSWORD", "API_KEY"] if not globals()[var]]
 if missing_vars:
     logger.error(f"❌ Missing environment variables: {', '.join(missing_vars)}")
     raise SystemExit("❌ Terminating: Missing required credentials.")
@@ -47,8 +47,8 @@ def create_db_engine():
 def create_db_engine_backtest():
     return create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME_BT}')
 
-# 🔹 API Key
-API_KEY = "92a8ca59-b7a1-4314-860d-0e6f3a58421d"
+# API Key - loaded from environment (CMC_API_KEY secret in GitHub Actions, or .env locally)
+API_KEY = os.getenv("CMC_API_KEY")
 
 def fetch_fear_and_greed_data(api_key, limit=500, start=1):
     """ Fetches paginated Fear & Greed Index data from the API. """
@@ -114,7 +114,7 @@ def process_fear_greed_data(data):
 def push_data_to_db(df, table_name="FE_FEAR_GREED_CMC"):
     """Pushes the Fear & Greed data to the database."""
     engine = create_db_engine()  # Connect to primary database
-    with engine.connect() as connection:
+    with engine.begin() as connection:
         df.to_sql(table_name, connection, if_exists="replace", index=False)
     print(f"Data successfully pushed to {table_name}")
 
