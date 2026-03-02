@@ -2,7 +2,7 @@ import requests
 import json
 import pandas as pd
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import os
 import logging
 from dotenv import load_dotenv
@@ -110,11 +110,15 @@ def process_fear_greed_data(data):
 
 
 def push_data_to_db(df, table_name="FE_FEAR_GREED_CMC"):
-    """Pushes the Fear & Greed data to the database."""
-    engine = create_db_engine()  # Connect to primary database
-    with engine.begin() as connection:
-        df.to_sql(table_name, connection, if_exists="replace", index=False)
-    print(f"Data successfully pushed to {table_name}")
+    """Pushes the Fear & Greed data to the database using TRUNCATE + INSERT.
+    Avoids DROP TABLE which would break dependent materialized views.
+    """
+    engine = create_db_engine()
+    with engine.connect() as conn:
+        conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
+        conn.commit()
+    df.to_sql(table_name, con=engine, if_exists="append", index=False)
+    logger.info(f"Data successfully pushed to {table_name}")
 
 
 if __name__ == "__main__":
