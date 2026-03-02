@@ -50,7 +50,7 @@ db_user = os.getenv("DB_USER")
 db_password = os.getenv("DB_PASSWORD")
 db_port = os.getenv("DB_PORT", "5432")
 
-missing_vars = [var for var in ["db_host", "db_user", "db_password"] if not locals()[var]]
+missing_vars = [var for var in ["db_host", "db_user", "db_password"] if not globals()[var]]
 if missing_vars:
     raise SystemExit(f"Missing required environment variables: {', '.join(v.upper() for v in missing_vars)}")
 
