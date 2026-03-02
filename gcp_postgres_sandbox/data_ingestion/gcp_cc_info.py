@@ -181,15 +181,6 @@ final_df = final_df.drop(columns=['index'])
 
 final_df.info()
 
-"""from sqlalchemy import create_engine
-
-
-# Create a SQLAlchemy engine to connect to the MySQL database
-engine = create_engine('mysql+mysqlconnector://yogass09:jaimaakamakhya@dbcp.cry66wamma47.ap-south-1.rds.amazonaws.com:3306/dbcp')
-
-"""
-
-
 # Create a SQLAlchemy engine for PostgreSQL using environment variables
 gcp_engine = create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}')
 

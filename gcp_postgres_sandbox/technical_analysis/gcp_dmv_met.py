@@ -28,14 +28,33 @@ start_time = time.time()
 # @title  GCP/Cloud DB connect
 from sqlalchemy import create_engine
 import pandas as pd
+import os
+import logging
+from dotenv import load_dotenv
 
-# Connection parameters
-db_host = "34.55.195.199"         # Public IP of your PostgreSQL instance on GCP
-db_name = "dbcp"                  # Database name
-db_name_bt = "cp_backtest"                  # Database name
-db_user = "yogass09"              # Database username
-db_password = "jaimaakamakhya"     # Database password
-db_port = 5432                    # PostgreSQL port
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# Load .env only when running locally
+if not os.getenv("GITHUB_ACTIONS"):
+    if os.path.exists(".env"):
+        load_dotenv()
+else:
+    logger.info("Running in GitHub Actions: using GitHub Secrets.")
+
+# Connection parameters from environment variables
+db_host = os.getenv("DB_HOST")
+db_name = os.getenv("DB_NAME", "dbcp")
+db_name_bt = os.getenv("DB_NAME_BT", "cp_backtest")
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+db_port = os.getenv("DB_PORT", "5432")
+
+missing_vars = [var for var in ["db_host", "db_user", "db_password"] if not locals()[var]]
+if missing_vars:
+    raise SystemExit(f"Missing required environment variables: {', '.join(v.upper() for v in missing_vars)}")
+
+logger.info(f"Database Configuration Loaded: DB_HOST={db_host}, DB_PORT={db_port}")
 
 # Create a SQLAlchemy engine for PostgreSQL
 gcp_engine = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')

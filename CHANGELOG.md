@@ -6,6 +6,19 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.2] - 2026-03-02 11:00:00 UTC
+
+### Security
+- **Removed hardcoded credentials from gcp_dmv_met.py** — Script was converted from a Colab notebook and retained hardcoded DB_HOST (34.55.195.199), DB_USER, DB_PASSWORD at module level. Replaced with `os.getenv()` pattern consistent with all other DMV scripts. Added dotenv loading, logging, and fast-fail validation guard.
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_met.py` lines 28-44
+- **Removed dead MySQL credentials from gcp_cc_info.py** — A commented-out docstring block contained a full MySQL connection string with username and password in plaintext. Block was non-executing but exposed credentials in source history. Removed entirely.
+  - File: `gcp_postgres_sandbox/data_ingestion/gcp_cc_info.py` lines 184-190
+
+### Impact Analysis
+- gcp_dmv_met.py now reads credentials from GitHub Secrets (DB_HOST, DB_USER, DB_PASSWORD, DB_PORT, DB_NAME, DB_NAME_BT) — same as every other technical analysis script
+- No logic changes to gcp_dmv_met.py — only credential sourcing changed
+- Risk: Low. Env vars are already set in the DMV workflow secrets block
+
 ## [4.4.1] - 2026-03-02 10:00:00 UTC
 
 ### Fixed
