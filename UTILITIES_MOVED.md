@@ -1,6 +1,6 @@
 # Database Utilities Moved
 
-## 🚀 Database Utilities Extracted to Separate Repository
+## 🚀  Database Utilities Extracted to Separate Repository
 
 The CryptoPrism database utilities have been organized and moved to a dedicated repository for better maintainability and distribution.
 
