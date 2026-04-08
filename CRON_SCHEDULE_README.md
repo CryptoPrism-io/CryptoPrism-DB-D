@@ -14,6 +14,7 @@ Comprehensive reference for all GitHub Actions workflows, their scheduling, depe
 | **Environment Test (Python)** | 06:00 Daily | 11:30 Daily | Daily | Scheduled | ✅ Active |
 | **Environment Test (R)** | 06:30 Daily | 12:00 Daily | Daily | Scheduled | ✅ Active |
 | **QA_Telegram** | Manual Only | Manual Only | On-Demand | Manual | ⚠️ Manual |
+| **BACKFILL_CP_BACKTEST** | Manual Only | Manual Only | One-Time | Manual | ⚠️ Manual |
 | **TEST_DEV** | On Push | On Push | Event-Based | Development | 🔧 Dev Only |
 
 ---
@@ -98,7 +99,16 @@ graph TD
 - **Purpose**: Validate R environment and database connections
 - **Duration**: ~3-5 minutes
 
-### 7. **TEST_DEV** - Development Validation
+### 7. **BACKFILL_CP_BACKTEST** - Retroactive Backtest Data Recovery
+- **File**: `.github/workflows/BACKFILL.yml`
+- **Schedule**: `workflow_dispatch` (Manual execution only)
+- **Primary Script**: `gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py`
+- **Purpose**: Rebuild ALL 13 FE_ tables in cp_backtest from historical OHLCV data
+- **Duration**: Estimated 2-6 hours (ratios phase processes rolling windows for every date)
+- **Timeout**: 6 hours
+- **Note**: One-time recovery script. Run once to backfill, then daily pipeline accumulates.
+
+### 8. **TEST_DEV** - Development Validation
 - **File**: `.github/workflows/TEST_DEV.yml`
 - **Schedule**: `push: dev_ai_code_branch` + `workflow_dispatch`
 - **Primary Script**: `gcp_postgres_sandbox/data_ingestion/cmc_listings.py` (test execution)
@@ -136,6 +146,7 @@ graph TD
 - ✅ **OHLCV** - Has `workflow_dispatch` 
 - ✅ **DMV** - Has `workflow_dispatch`
 - ✅ **QA_Telegram** - Manual only
+- ✅ **BACKFILL_CP_BACKTEST** - Manual only (one-time recovery)
 - ✅ **TEST_DEV** - Has `workflow_dispatch`
 - ❌ **Environment Tests** - Schedule only (no manual trigger)
 

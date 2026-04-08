@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Retroactive backfill script for cp_backtest** (`gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py`) -- Rebuilds ALL 13 FE_ tables in cp_backtest from historical OHLCV source data. Processes full OHLCV history (4700+ days) through each TA computation pipeline without timestamp filtering, producing complete indicator history for backtesting.
+- **GitHub Actions workflow for backfill** (`.github/workflows/BACKFILL.yml`) -- Manual dispatch workflow to run backfill on GitHub Actions infrastructure (faster DB connectivity). 6-hour timeout for ratios phase.
+- Updated CRON_SCHEDULE_README.md with BACKFILL_CP_BACKTEST workflow documentation.
 
 ### Rationale
-The cp_backtest database only held 1 date of data due to bugs fixed in v4.5.0. This script recovers the missing history by recomputing all indicators from the raw OHLCV data that was properly accumulated. Runs in 8 phases: diagnose, momentum, oscillators, TVV, PCT, ratios (rolling 28-day windows), metrics, and core (signal aggregation). Includes pre/post diagnostic output showing row counts and distinct dates per table.
+The cp_backtest database only held 1 date of data due to bugs fixed in v4.5.0. This script recovers the missing history by recomputing all indicators from the raw OHLCV data that was properly accumulated. Runs in 8 phases: diagnose, momentum, oscillators, TVV, PCT, ratios (rolling 28-day windows), metrics, and core (signal aggregation). Running on GitHub Actions for faster DB round-trip latency.
 
 ### Impact Analysis
 - Script is standalone and does not modify any existing pipeline code
