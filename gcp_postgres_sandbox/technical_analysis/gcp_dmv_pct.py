@@ -152,12 +152,21 @@ def push_to_db(df, table_name):
     engine.dispose()
     logging.info(f"✅ {table_name} uploaded successfully to LIVE DB!")
 
-# 🔹 Push Data to Backtest Database (Append Mode)
+# Push Data to Backtest Database (DELETE + INSERT to prevent duplicates)
 def push_to_db_backtest(df, table_name):
     engine = create_db_engine_backtest()
+    if 'timestamp' in df.columns:
+        timestamps = df['timestamp'].dropna().unique().tolist()
+        with engine.connect() as conn:
+            for ts in timestamps:
+                conn.execute(
+                    text(f'DELETE FROM "{table_name}" WHERE "timestamp" = :ts'),
+                    {"ts": ts}
+                )
+            conn.commit()
     df.to_sql(table_name, con=engine, if_exists="append", index=False)
     engine.dispose()
-    logging.info(f"✅ {table_name} uploaded successfully to BACKTEST DB!")
+    logging.info(f"{table_name} uploaded to backtest successfully!")
 
 # 🔹 Main Execution
 if __name__ == "__main__":

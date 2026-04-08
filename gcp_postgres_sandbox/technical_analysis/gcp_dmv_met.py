@@ -228,7 +228,12 @@ print("Metrics DataFrame uploaded to dbcp database successfully!")
 # Create a SQLAlchemy engine for PostgreSQL
 gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
 
-# APPEND for FE_METRICS (cp_backtest) - accumulate historical data
+# DELETE + INSERT for FE_METRICS (cp_backtest) - accumulate without duplicates
+if 'timestamp' in metrics.columns:
+    for ts in metrics['timestamp'].dropna().unique():
+        with gcp_engine_bt.connect() as conn:
+            conn.execute(text('DELETE FROM "FE_METRICS" WHERE "timestamp" = :ts'), {"ts": ts})
+            conn.commit()
 metrics.to_sql('FE_METRICS', con=gcp_engine_bt, if_exists='append', index=False)
 
 print("Metrics DataFrame uploaded to cp_backtest database successfully!")
@@ -288,7 +293,12 @@ print("FE_METRICS_SIGNAL DataFrame uploaded to dbcp database successfully!")
 # Create a SQLAlchemy engine for PostgreSQL
 gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
 
-# APPEND for FE_METRICS_SIGNAL (cp_backtest) - accumulate historical data
+# DELETE + INSERT for FE_METRICS_SIGNAL (cp_backtest) - accumulate without duplicates
+if 'timestamp' in metrics_signal.columns:
+    for ts in metrics_signal['timestamp'].dropna().unique():
+        with gcp_engine_bt.connect() as conn:
+            conn.execute(text('DELETE FROM "FE_METRICS_SIGNAL" WHERE "timestamp" = :ts'), {"ts": ts})
+            conn.commit()
 metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine_bt, if_exists='append', index=False)
 
 end_time = time.time()

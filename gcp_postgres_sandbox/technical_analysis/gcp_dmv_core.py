@@ -129,9 +129,16 @@ except SQLAlchemyError as e:
     logger.error(f"Error uploading scores: {e}")
     exit(1)
 
-# --- Push to Backtest Database (Append Mode) ---
+# --- Push to Backtest Database (DELETE + INSERT to prevent duplicates) ---
 gcp_engine_bt = create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME_BT}')
 try:
+    # Delete existing rows for the timestamps being inserted
+    if 'timestamp' in df.columns:
+        for ts in df['timestamp'].dropna().unique():
+            with gcp_engine_bt.connect() as conn:
+                conn.execute(text('DELETE FROM "FE_DMV_ALL" WHERE "timestamp" = :ts'), {"ts": ts})
+                conn.execute(text('DELETE FROM "FE_DMV_SCORES" WHERE "timestamp" = :ts'), {"ts": ts})
+                conn.commit()
     df.to_sql('FE_DMV_ALL', con=gcp_engine_bt, if_exists='append', index=False)
     logger.info("FE_DMV_ALL appended to cp_backtest.")
     dmv_scores.to_sql('FE_DMV_SCORES', con=gcp_engine_bt, if_exists='append', index=False, method='multi', chunksize=BATCH_SIZE)

@@ -231,18 +231,28 @@ def generate_binary_signals_ratios(ratios_df):
 
     return ratios_df
 
-# 🔹 Push Data to Database with TRUNCATE + INSERT
+# Push Data to Database with TRUNCATE + INSERT (live) or DELETE + INSERT (backtest)
 def push_to_db(df, table_name, engine, if_exists="replace"):
     try:
         if if_exists == "replace":
-            # Use TRUNCATE + INSERT to preserve table structure
+            # Live DB: TRUNCATE + INSERT to preserve table structure
             with engine.connect() as conn:
                 conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
                 conn.commit()
             df.to_sql(table_name, con=engine, if_exists="append", index=False)
         else:
-            df.to_sql(table_name, con=engine, if_exists=if_exists, index=False)
-        logging.info(f"✅ {table_name} uploaded successfully!")
+            # Backtest DB: DELETE matching timestamps first to prevent duplicates
+            if 'timestamp' in df.columns:
+                timestamps = df['timestamp'].dropna().unique().tolist()
+                with engine.connect() as conn:
+                    for ts in timestamps:
+                        conn.execute(
+                            text(f'DELETE FROM "{table_name}" WHERE "timestamp" = :ts'),
+                            {"ts": ts}
+                        )
+                    conn.commit()
+            df.to_sql(table_name, con=engine, if_exists="append", index=False)
+        logging.info(f"{table_name} uploaded successfully!")
     except Exception as e:
         logging.error(f"Error pushing data to {table_name}: {e}")
         raise

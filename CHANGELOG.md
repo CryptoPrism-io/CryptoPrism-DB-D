@@ -6,6 +6,21 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.2] - 2026-04-08 UTC
+
+### Fixed
+- **Duplicate rows in cp_backtest from re-runs** -- All 7 TA scripts now use DELETE-before-INSERT when appending to cp_backtest. Before inserting new data, existing rows matching the same timestamp are deleted. This makes the pipeline idempotent: re-running the DMV workflow (manual dispatch, retries) no longer creates duplicate (slug, timestamp) rows.
+  - Files modified: gcp_dmv_mom.py, gcp_dmv_osc.py, gcp_dmv_rat.py, gcp_dmv_tvv.py, gcp_dmv_pct.py, gcp_dmv_met.py, gcp_dmv_core.py
+
+### Rationale
+The cp_backtest append path used blind `to_sql(if_exists="append")` with no dedup. When DMV ran multiple times per day (scheduled + manual dispatch, or workflow retries), identical rows were inserted for the same (slug, timestamp) pair. This inflates row counts and would corrupt any downstream training or backtesting queries. The DELETE-before-INSERT pattern is idempotent and matches the OHLCV dedup approach in the R script.
+
+### Impact Analysis
+- All 7 daily pipeline scripts now safe for re-runs against cp_backtest
+- Live DB (dbcp) writes unchanged (still TRUNCATE+INSERT)
+- Backfill script unaffected (uses its own TRUNCATE+INSERT)
+- Risk: Low. DELETE scoped to exact timestamp being inserted
+
 ## [4.5.1] - 2026-04-08 UTC
 
 ### Added

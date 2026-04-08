@@ -237,12 +237,21 @@ def push_to_db(df, table_name):
 def create_db_engine_backtest():
     return create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME_BT}')
 
-# 🔹 Push Data to Database
+# Push Data to Backtest Database (DELETE + INSERT to prevent duplicates)
 def push_to_db_backtest(df, table_name):
     engine = create_db_engine_backtest()
+    if 'timestamp' in df.columns:
+        timestamps = df['timestamp'].dropna().unique().tolist()
+        with engine.connect() as conn:
+            for ts in timestamps:
+                conn.execute(
+                    text(f'DELETE FROM "{table_name}" WHERE "timestamp" = :ts'),
+                    {"ts": ts}
+                )
+            conn.commit()
     df.to_sql(table_name, con=engine, if_exists="append", index=False)
     engine.dispose()
-    logging.info(f"✅ {table_name} uploaded successfully!")
+    logging.info(f"{table_name} uploaded to backtest successfully!")
 
 if __name__ == "__main__":
     engine = create_db_engine()
