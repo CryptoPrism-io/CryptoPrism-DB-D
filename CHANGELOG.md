@@ -6,6 +6,20 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.1] - 2026-04-08 UTC
+
+### Added
+- **Retroactive backfill script for cp_backtest** (`gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py`) -- Rebuilds ALL 13 FE_ tables in cp_backtest from historical OHLCV source data. Processes full OHLCV history (4700+ days) through each TA computation pipeline without timestamp filtering, producing complete indicator history for backtesting.
+
+### Rationale
+The cp_backtest database only held 1 date of data due to bugs fixed in v4.5.0. This script recovers the missing history by recomputing all indicators from the raw OHLCV data that was properly accumulated. Runs in 8 phases: diagnose, momentum, oscillators, TVV, PCT, ratios (rolling 28-day windows), metrics, and core (signal aggregation). Includes pre/post diagnostic output showing row counts and distinct dates per table.
+
+### Impact Analysis
+- Script is standalone and does not modify any existing pipeline code
+- Uses TRUNCATE+INSERT for each backtest table (full rebuild approach)
+- Imports computation functions from existing TA modules to ensure consistency
+- Risk: Low. Only writes to cp_backtest; no changes to dbcp (live)
+
 ## [4.5.0] - 2026-04-08 UTC
 
 ### Fixed
