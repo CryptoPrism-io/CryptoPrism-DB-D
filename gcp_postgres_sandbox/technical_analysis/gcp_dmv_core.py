@@ -33,6 +33,7 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_PORT = os.getenv("DB_PORT", "5432")  # Default to 5432 if not set
 DB_NAME = os.getenv("DB_NAME", "dbcp")  # Default database
+DB_NAME_BT = os.getenv("DB_NAME_BT", "cp_backtest")  # Backtest database
 
 # Validate required environment variables
 missing_vars = [var for var in ["DB_HOST", "DB_USER", "DB_PASSWORD"] if not globals()[var]]
@@ -128,6 +129,18 @@ except SQLAlchemyError as e:
     logger.error(f"Error uploading scores: {e}")
     exit(1)
 
+# --- Push to Backtest Database (Append Mode) ---
+gcp_engine_bt = create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME_BT}')
+try:
+    df.to_sql('FE_DMV_ALL', con=gcp_engine_bt, if_exists='append', index=False)
+    logger.info("FE_DMV_ALL appended to cp_backtest.")
+    dmv_scores.to_sql('FE_DMV_SCORES', con=gcp_engine_bt, if_exists='append', index=False, method='multi', chunksize=BATCH_SIZE)
+    logger.info("FE_DMV_SCORES appended to cp_backtest.")
+except SQLAlchemyError as e:
+    logger.error(f"Error uploading to backtest: {e}")
+finally:
+    gcp_engine_bt.dispose()
+
 logger.info(f"Done in {(time.time() - start_time) / 60:.2f} mins.")
 gcp_engine.dispose()
-logger.info("✅ Database connection closed successfully.")
+logger.info("Database connection closed successfully.")

@@ -228,10 +228,7 @@ print("Metrics DataFrame uploaded to dbcp database successfully!")
 # Create a SQLAlchemy engine for PostgreSQL
 gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
 
-# TRUNCATE and INSERT for FE_METRICS (cp_backtest)
-with gcp_engine_bt.connect() as conn:
-    conn.execute(text('TRUNCATE TABLE "FE_METRICS"'))
-    conn.commit()
+# APPEND for FE_METRICS (cp_backtest) - accumulate historical data
 metrics.to_sql('FE_METRICS', con=gcp_engine_bt, if_exists='append', index=False)
 
 print("Metrics DataFrame uploaded to cp_backtest database successfully!")
@@ -291,10 +288,7 @@ print("FE_METRICS_SIGNAL DataFrame uploaded to dbcp database successfully!")
 # Create a SQLAlchemy engine for PostgreSQL
 gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
 
-# TRUNCATE and INSERT for FE_METRICS_SIGNAL (cp_backtest)
-with gcp_engine_bt.connect() as conn:
-    conn.execute(text('TRUNCATE TABLE "FE_METRICS_SIGNAL"'))
-    conn.commit()
+# APPEND for FE_METRICS_SIGNAL (cp_backtest) - accumulate historical data
 metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine_bt, if_exists='append', index=False)
 
 end_time = time.time()

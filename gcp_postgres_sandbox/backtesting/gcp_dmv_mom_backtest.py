@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import logging
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import time
 import os
 from dotenv import load_dotenv
@@ -184,11 +184,14 @@ def generate_binary_signals_momentum(df):
 
     return df
 
-# 🔹 Push Data to Database (BACKTEST VERSION - REPLACE ALL DATA)
+# Push Data to Database (BACKTEST VERSION - TRUNCATE + INSERT to preserve table structure)
 def push_to_db_backtest(df, table_name, engine):
     try:
-        df.to_sql(table_name, con=engine, if_exists="replace", index=False)
-        logging.info(f"✅ {table_name} COMPLETELY REPLACED in backtest database!")
+        with engine.connect() as conn:
+            conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
+            conn.commit()
+        df.to_sql(table_name, con=engine, if_exists="append", index=False)
+        logging.info(f"{table_name} rebuilt in backtest database (TRUNCATE+INSERT).")
     except Exception as e:
         logging.error(f"Error pushing data to {table_name}: {e}")
         raise

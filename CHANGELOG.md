@@ -6,6 +6,26 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-04-08 UTC
+
+### Fixed
+- **cp_backtest data loss: gcp_dmv_met.py truncating backtest tables every run** -- FE_METRICS and FE_METRICS_SIGNAL were TRUNCATED in cp_backtest before each insert, destroying all historical data. Removed TRUNCATE for backtest writes; now uses pure append to accumulate history.
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_met.py` lines 231-234, 294-297
+- **cp_backtest missing tables: gcp_dmv_core.py never wrote to backtest database** -- FE_DMV_ALL and FE_DMV_SCORES had zero backtest DB connection. Added DB_NAME_BT env var, backtest engine creation, and append writes for both tables.
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_core.py` lines 36, 131-142
+- **gcp_dmv_mom_backtest.py using DROP+CREATE instead of TRUNCATE+INSERT** -- `if_exists="replace"` in pandas drops and recreates the table, destroying schema, indexes, and constraints. Changed to TRUNCATE+INSERT pattern to preserve table structure during full recomputation.
+  - File: `gcp_postgres_sandbox/backtesting/gcp_dmv_mom_backtest.py` lines 187-194
+
+### Rationale
+The cp_backtest database was designed to accumulate all FE_ feature engineering data historically for backtesting, but three bugs caused it to hold only the latest snapshot (1 date). The root cause was inconsistent write patterns: 5 of 7 TA scripts correctly used append for backtest, but gcp_dmv_met.py copy-pasted the live-DB TRUNCATE pattern to backtest writes, gcp_dmv_core.py had no backtest connection at all, and gcp_dmv_mom_backtest.py used pandas replace mode which drops tables entirely.
+
+### Impact Analysis
+- All 13 FE_ tables across cp_backtest will now accumulate daily snapshots going forward
+- Historical data already lost cannot be recovered (only 1 date exists: Apr 7 2026)
+- No changes to dbcp (live) write behavior -- TRUNCATE+INSERT remains correct there
+- Risk: Low. Only backtest write paths changed; live pipeline unchanged
+- Minor version bump (4.4.2 -> 4.5.0) because this enables a new capability (historical backtest accumulation)
+
 ## [4.4.2] - 2026-03-02 11:00:00 UTC
 
 ### Security
