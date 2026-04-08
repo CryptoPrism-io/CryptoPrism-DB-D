@@ -62,9 +62,6 @@ if missing_vars:
 TA_DIR = os.path.join(os.path.dirname(__file__), '..', 'technical_analysis')
 sys.path.insert(0, os.path.abspath(TA_DIR))
 
-CHUNK_SIZE = 10000
-
-
 def create_engine_live():
     return create_engine(
         f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
@@ -78,15 +75,18 @@ def create_engine_backtest():
 
 
 def truncate_and_insert(df, table_name, engine):
-    """TRUNCATE table then INSERT all rows in chunks."""
+    """TRUNCATE table then INSERT all rows in safe chunks for pg8000."""
     logger.info(f"  Writing {len(df)} rows to {table_name}...")
     try:
         with engine.connect() as conn:
             conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
             conn.commit()
+        # pg8000 limit: 65535 params per batch. Safe chunk = 65535 / num_columns
+        num_cols = len(df.columns)
+        safe_chunk = max(1, 65000 // num_cols)
         df.to_sql(table_name, con=engine, if_exists='append',
-                  index=False, method='multi', chunksize=CHUNK_SIZE)
-        logger.info(f"  {table_name}: {len(df)} rows written.")
+                  index=False, method='multi', chunksize=safe_chunk)
+        logger.info(f"  {table_name}: {len(df)} rows written (chunks of {safe_chunk}).")
     except Exception as e:
         logger.error(f"  Error writing {table_name}: {e}")
         raise
@@ -618,8 +618,27 @@ def phase_core(engine_bt):
         'Valuation_Score': v_score
     })
 
-    truncate_and_insert(df, "FE_DMV_ALL", engine_bt)
-    truncate_and_insert(dmv_scores, "FE_DMV_SCORES", engine_bt)
+    # FE_DMV_ALL and FE_DMV_SCORES may not exist yet in cp_backtest
+    # Use if_exists='replace' for first creation, then backfill handles future runs
+    try:
+        truncate_and_insert(df, "FE_DMV_ALL", engine_bt)
+    except Exception:
+        logger.info("  FE_DMV_ALL does not exist yet, creating...")
+        num_cols = len(df.columns)
+        safe_chunk = max(1, 65000 // num_cols)
+        df.to_sql("FE_DMV_ALL", con=engine_bt, if_exists='replace',
+                  index=False, method='multi', chunksize=safe_chunk)
+        logger.info(f"  FE_DMV_ALL created with {len(df)} rows.")
+
+    try:
+        truncate_and_insert(dmv_scores, "FE_DMV_SCORES", engine_bt)
+    except Exception:
+        logger.info("  FE_DMV_SCORES does not exist yet, creating...")
+        num_cols = len(dmv_scores.columns)
+        safe_chunk = max(1, 65000 // num_cols)
+        dmv_scores.to_sql("FE_DMV_SCORES", con=engine_bt, if_exists='replace',
+                          index=False, method='multi', chunksize=safe_chunk)
+        logger.info(f"  FE_DMV_SCORES created with {len(dmv_scores)} rows.")
     logger.info("  Core backfill complete.")
 
 
