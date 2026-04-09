@@ -25,6 +25,7 @@ import os
 import sys
 import time
 import logging
+import argparse
 import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -645,33 +646,56 @@ def phase_core(engine_bt):
 # ============================================================
 # MAIN
 # ============================================================
+ALL_PHASES = ["momentum", "oscillators", "tvv", "pct", "ratios", "metrics", "core"]
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Backfill cp_backtest FE_ tables")
+    parser.add_argument(
+        "--only", type=str, default=None,
+        help="Comma-separated phases to run. Options: " + ",".join(ALL_PHASES) +
+             ". Default: run all phases."
+    )
+    args = parser.parse_args()
+
+    if args.only:
+        selected = [p.strip().lower() for p in args.only.split(",")]
+        invalid = [p for p in selected if p not in ALL_PHASES]
+        if invalid:
+            print(f"Invalid phases: {invalid}. Valid: {ALL_PHASES}")
+            sys.exit(1)
+    else:
+        selected = ALL_PHASES
+
     overall_start = time.time()
-    logger.info("BACKFILL CP_BACKTEST - Starting full rebuild")
+    logger.info(f"BACKFILL CP_BACKTEST - Phases: {', '.join(selected)}")
 
     engine_live = create_engine_live()
     engine_bt = create_engine_backtest()
 
-    # Phase 1: Diagnose
+    # Phase 1: Always diagnose
     phase_diagnose(engine_bt)
 
-    # Fetch OHLCV once, reuse for phases 2-6
-    ohlcv_df = fetch_all_ohlcv(engine_live)
+    # Fetch OHLCV if any OHLCV-based phase is selected
+    ohlcv_phases = {"momentum", "oscillators", "tvv", "pct", "ratios"}
+    if ohlcv_phases & set(selected):
+        ohlcv_df = fetch_all_ohlcv(engine_live)
+    else:
+        ohlcv_df = None
 
-    # Phase 2-5: Time-series indicators (full OHLCV history)
-    phase_momentum(ohlcv_df, engine_bt)
-    phase_oscillators(ohlcv_df, engine_bt)
-    phase_tvv(ohlcv_df, engine_bt)
-    phase_pct(ohlcv_df, engine_bt)
-
-    # Phase 6: Ratios (rolling 28-day window for each date)
-    phase_ratios(ohlcv_df, engine_bt)
-
-    # Phase 7: Metrics (uses separate data sources)
-    phase_metrics(engine_live, engine_bt)
-
-    # Phase 8: Core (joins signal tables already populated above)
-    phase_core(engine_bt)
+    if "momentum" in selected:
+        phase_momentum(ohlcv_df, engine_bt)
+    if "oscillators" in selected:
+        phase_oscillators(ohlcv_df, engine_bt)
+    if "tvv" in selected:
+        phase_tvv(ohlcv_df, engine_bt)
+    if "pct" in selected:
+        phase_pct(ohlcv_df, engine_bt)
+    if "ratios" in selected:
+        phase_ratios(ohlcv_df, engine_bt)
+    if "metrics" in selected:
+        phase_metrics(engine_live, engine_bt)
+    if "core" in selected:
+        phase_core(engine_bt)
 
     # Final diagnosis
     logger.info("")

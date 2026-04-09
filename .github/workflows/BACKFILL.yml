@@ -1,13 +1,18 @@
 name: BACKFILL_CP_BACKTEST
 
 on:
-  workflow_dispatch: {}  # Manual trigger only
+  workflow_dispatch:
+    inputs:
+      phases:
+        description: 'Comma-separated phases to run (momentum,oscillators,tvv,pct,ratios,metrics,core). Leave empty for all.'
+        required: false
+        default: ''
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
     environment: testsecrets
-    timeout-minutes: 360  # 6 hour max (ratios phase can be slow)
+    timeout-minutes: 360
 
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +36,10 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_PORT: ${{ secrets.DB_PORT }}
           GITHUB_ACTIONS: true
-        run: python gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py
+        run: |
+          if [ -n "${{ github.event.inputs.phases }}" ]; then
+            python gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py --only "${{ github.event.inputs.phases }}"
+          else
+            python gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py
+          fi
         continue-on-error: false
