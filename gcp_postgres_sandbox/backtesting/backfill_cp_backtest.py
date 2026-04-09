@@ -531,7 +531,11 @@ def phase_metrics(engine_live, engine_bt):
 
     met_latest['m_cap_cat'] = met_latest['market_cap'].apply(categorize_market_cap)
     met_latest = met_latest.drop_duplicates(subset=['slug'], keep='first')
-    metrics = met_latest.drop(met_latest.columns[4:10], axis=1)
+
+    # Drop raw OHLCV columns by NAME (not position -- positional drops break
+    # when set_index/reset_index reorders columns)
+    ohlcv_drop_cols = ['name', 'open', 'high', 'low', 'close', 'volume']
+    metrics = met_latest.drop(columns=[c for c in ohlcv_drop_cols if c in met_latest.columns])
 
     # Signals
     metrics['m_pct_1d_signal'] = np.where(metrics['m_pct_1d'] > 0, 1, -1)
@@ -549,10 +553,28 @@ def phase_metrics(engine_live, engine_bt):
                  1 - (1 / metrics['d_met_coin_age_y']), 0)
     )
 
-    metrics_signal = metrics.drop(metrics.columns[3:22], axis=1)
+    # Select signal columns explicitly by name (not positional drop)
+    signal_cols = [c for c in metrics.columns if c in
+                   ['timestamp', 'id', 'symbol', 'slug',
+                    'm_pct_1d_signal', 'd_pct_cum_ret_signal',
+                    'd_met_ath_month_signal', 'd_market_cap_signal',
+                    'd_met_coin_age_y_signal']]
+    metrics_signal = metrics[signal_cols]
 
-    truncate_and_insert(metrics, "FE_METRICS", engine_bt)
-    truncate_and_insert(metrics_signal, "FE_METRICS_SIGNAL", engine_bt)
+    # Use replace for metrics (snapshot data, avoids schema mismatch with existing table)
+    logger.info(f"  Writing {len(metrics)} rows to FE_METRICS...")
+    num_cols = len(metrics.columns)
+    safe_chunk = max(1, 65000 // num_cols)
+    metrics.to_sql('FE_METRICS', con=engine_bt, if_exists='replace',
+                   index=False, method='multi', chunksize=safe_chunk)
+    logger.info(f"  FE_METRICS: {len(metrics)} rows written.")
+
+    logger.info(f"  Writing {len(metrics_signal)} rows to FE_METRICS_SIGNAL...")
+    num_cols = len(metrics_signal.columns)
+    safe_chunk = max(1, 65000 // num_cols)
+    metrics_signal.to_sql('FE_METRICS_SIGNAL', con=engine_bt, if_exists='replace',
+                          index=False, method='multi', chunksize=safe_chunk)
+    logger.info(f"  FE_METRICS_SIGNAL: {len(metrics_signal)} rows written.")
     logger.info("  Metrics backfill complete.")
 
 
