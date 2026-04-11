@@ -6,6 +6,27 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.3] - 2026-04-11 UTC
+
+### Fixed
+- **DMV workflow failing: schema mismatch between daily script and backfill for cp_backtest FE_METRICS** -- `gcp_dmv_met.py` used positional column drops (`metrics.columns[4:10]`) which dropped different columns than the backfill script's named drops. After the backfill (v4.5.1) recreated FE_METRICS in cp_backtest with `if_exists='replace'`, the daily script's INSERT failed because its DataFrame had `name` (absent in table) and lacked `market_cap` (present in table).
+  - Replaced positional drop at line 209 with named drops: `['name', 'open', 'high', 'low', 'close', 'volume']` (matching backfill)
+  - Replaced positional drop at line 274 for FE_METRICS_SIGNAL with explicit column selection by name (matching backfill)
+  - Changed dbcp FE_METRICS write from TRUNCATE+append to `if_exists='replace'` to handle the schema change
+  - FE_METRICS_SIGNAL dbcp write unchanged (TRUNCATE+append, signal schema is stable)
+  - Added `pool_pre_ping=True` to all engine creation to prevent stale connection errors
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_met.py`
+
+### Rationale
+The backfill script (commit 0d150c4, run April 9) fixed its own positional drops to named drops, but used `if_exists='replace'` which recreated FE_METRICS in cp_backtest with a different column set (drops `name`, keeps `market_cap`). The daily DMV script still used positional drops that kept `name` and dropped `market_cap`. This caused pg8000 InterfaceError ("in failed transaction block") on every DMV run since April 10. The fix aligns both scripts to use identical named column drops and explicit signal column selection.
+
+### Impact Analysis
+- DMV workflow will resume succeeding on next scheduled run
+- dbcp FE_METRICS schema changes: `name` column removed, `market_cap` column added
+- dbcp FE_METRICS_SIGNAL: now uses explicit column selection (same columns as before)
+- cp_backtest writes: no change in approach (DELETE+INSERT), schema now matches
+- Risk: Low. Downstream consumers of FE_METRICS should verify they do not depend on the `name` column (use `slug` instead)
+
 ## [4.5.2] - 2026-04-08 UTC
 
 ### Fixed

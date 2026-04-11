@@ -60,7 +60,7 @@ logger.info(f"Database Configuration Loaded: DB_HOST={db_host}, DB_PORT={db_port
 gcp_engine = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
 
 # Create a SQLAlchemy engine for PostgreSQL
-gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
+gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}', pool_pre_ping=True)
 
 # @title SQL Query Connection to AWS for Data Listing
 
@@ -204,9 +204,10 @@ if not duplicate_slugs.empty:
 # Remove duplicates, keeping the first occurrence
 metrics_no_duplicates = metrics.drop_duplicates(subset=['slug'], keep='first')
 
-# prompt: drop col 4:9 in metrics
-
-metrics = metrics.drop(metrics.columns[4:10], axis=1)
+# Drop raw OHLCV columns by NAME (not position -- positional drops break
+# when set_index/reset_index reorders columns or backfill recreates table)
+ohlcv_drop_cols = ['name', 'open', 'high', 'low', 'close', 'volume']
+metrics = metrics.drop(columns=[c for c in ohlcv_drop_cols if c in metrics.columns])
 metrics.info()
 
 # @title SQLalchemy to push data to aws db (mysql)
@@ -214,19 +215,16 @@ metrics.info()
 from sqlalchemy import create_engine, text
 
 
-# Create a SQLAlchemy engine for PostgreSQL
-gcp_engine = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
+# Create a SQLAlchemy engine for PostgreSQL (pool_pre_ping keeps connections alive)
+gcp_engine = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}', pool_pre_ping=True)
 
-# TRUNCATE and INSERT for FE_METRICS (dbcp)
-with gcp_engine.connect() as conn:
-    conn.execute(text('TRUNCATE TABLE "FE_METRICS"'))
-    conn.commit()
-metrics.to_sql('FE_METRICS', con=gcp_engine, if_exists='append', index=False)
+# Replace FE_METRICS in dbcp (drop+create to keep schema in sync)
+metrics.to_sql('FE_METRICS', con=gcp_engine, if_exists='replace', index=False)
 
 print("Metrics DataFrame uploaded to dbcp database successfully!")
 
 # Create a SQLAlchemy engine for PostgreSQL
-gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
+gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}', pool_pre_ping=True)
 
 # DELETE + INSERT for FE_METRICS (cp_backtest) - accumulate without duplicates
 if 'timestamp' in metrics.columns:
@@ -271,7 +269,12 @@ metrics['d_met_coin_age_y_signal'] = np.where(
 
 metrics.info()
 
-metrics_signal = metrics.drop(metrics.columns[3:22], axis=1)
+# Select signal columns explicitly by name (not positional drop)
+signal_cols = ['timestamp', 'id', 'slug',
+               'm_pct_1d_signal', 'd_pct_cum_ret_signal',
+               'd_met_ath_month_signal', 'd_market_cap_signal',
+               'd_met_coin_age_y_signal']
+metrics_signal = metrics[[c for c in signal_cols if c in metrics.columns]]
 
 metrics_signal.info()
 
@@ -282,7 +285,7 @@ from sqlalchemy import create_engine
 # Create a SQLAlchemy engine to connect to the MySQL database
 #engine = create_engine('mysql+mysqlconnector://yogass09:jaimaakamakhya@dbcp.cry66wamma47.ap-south-1.rds.amazonaws.com:3306/dbcp')
 
-# TRUNCATE and INSERT for FE_METRICS_SIGNAL (dbcp)
+# TRUNCATE and INSERT for FE_METRICS_SIGNAL (dbcp) - signal schema unchanged
 with gcp_engine.connect() as conn:
     conn.execute(text('TRUNCATE TABLE "FE_METRICS_SIGNAL"'))
     conn.commit()
@@ -291,7 +294,7 @@ metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine, if_exists='append', i
 print("FE_METRICS_SIGNAL DataFrame uploaded to dbcp database successfully!")
 
 # Create a SQLAlchemy engine for PostgreSQL
-gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}')
+gcp_engine_bt = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name_bt}', pool_pre_ping=True)
 
 # DELETE + INSERT for FE_METRICS_SIGNAL (cp_backtest) - accumulate without duplicates
 if 'timestamp' in metrics_signal.columns:
