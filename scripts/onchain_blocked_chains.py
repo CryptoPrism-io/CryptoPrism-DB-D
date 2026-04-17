@@ -15,11 +15,10 @@ from google.cloud import bigquery
 
 QUERIES = {
     "sol": """
-        SELECT DATE(block_timestamp) AS d, COUNT(DISTINCT a.pubkey) AS v
-        FROM `bigquery-public-data.crypto_solana_mainnet_us.Transactions` t,
-        UNNEST(t.accounts) AS a
+        SELECT DATE(block_timestamp) AS d,
+          COUNT(DISTINCT source) + COUNT(DISTINCT destination) AS v
+        FROM `bigquery-public-data.crypto_solana_mainnet_us.Token Transfers`
         WHERE block_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
-          AND status = 'Success' AND a.signer = TRUE
         GROUP BY d ORDER BY d DESC
     """,
     "near": """
