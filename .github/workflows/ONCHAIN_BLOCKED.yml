@@ -1,0 +1,48 @@
+name: ONCHAIN_BLOCKED
+
+on:
+  workflow_run:
+    workflows: ["DMV"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Number of days to backfill"
+        default: "3"
+
+jobs:
+  refresh-blocked-chains:
+    runs-on: ubuntu-latest
+    environment: testsecrets
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install google-cloud-bigquery psycopg2-binary
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/963362833537/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-actions@social-data-pipeline-and-push.iam.gserviceaccount.com
+
+      - name: Refresh SOL/NEAR/MVX on-chain data
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          GCP_PROJECT_ID: social-data-pipeline-and-push
+          BACKFILL_DAYS: ${{ github.event.inputs.days || '3' }}
+        run: python scripts/onchain_blocked_chains.py
