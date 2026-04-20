@@ -108,13 +108,8 @@ dmv_scores = pd.DataFrame({
     'Valuation_Score': Valuation['Valuation_Score']
 })
 
-latest_timestamp = df['timestamp'].max()
-df = df[df['timestamp'] == latest_timestamp]
-
-if df['timestamp'].nunique() == 1:
-    print("✅ Latest timestamp filtered.")
-else:
-    print("⚠️ Multiple timestamps still exist.")
+df = df.loc[df.groupby('slug')['timestamp'].idxmax()]
+print(f"✅ Per-slug latest timestamp filtered. {df.shape[0]} slugs retained.")
 
 logger.info(f"Remaining rows: {df.shape[0]}")
 

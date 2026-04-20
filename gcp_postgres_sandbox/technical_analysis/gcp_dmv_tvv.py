@@ -265,9 +265,8 @@ if __name__ == "__main__":
            .pipe(calculate_cmf)
            .pipe(generate_binary_signals))
 
-    # Keep only the latest timestamp records
-    latest_timestamp = df["timestamp"].max()
-    latest_data = df[df["timestamp"] == latest_timestamp]
+    # Keep latest timestamp PER SLUG to avoid dropping coins with slightly older data
+    latest_data = df.loc[df.groupby('slug')['timestamp'].idxmax()]
 
     # Ensure required columns exist **after** all calculations
     latest_data_cols = ensure_required_columns(latest_data)

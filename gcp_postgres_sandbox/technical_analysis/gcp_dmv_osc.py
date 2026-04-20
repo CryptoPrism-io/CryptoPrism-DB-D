@@ -281,9 +281,8 @@ if __name__ == "__main__":
           .pipe(generate_binary_signals_oscillators)
           )
 
-    # --- Data Filtering (Keep only the rows with the absolute latest timestamp) ---
-    latest_timestamp = df['timestamp'].max()
-    latest_data = df[df['timestamp'] == latest_timestamp]
+    # --- Data Filtering (Keep latest timestamp PER SLUG to avoid dropping coins with slightly older data) ---
+    latest_data = df.loc[df.groupby('slug')['timestamp'].idxmax()]
 
     # --- Column Selection (GUARANTEED TO MATCH YOUR LIST) ---
     oscillator_cols = [
