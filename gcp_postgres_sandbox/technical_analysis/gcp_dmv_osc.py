@@ -195,6 +195,112 @@ def calculate_trix(df, period=15):
     df['TRIX'] = df.groupby('slug')['EMA3'].transform(lambda x: x.pct_change() * 100)
     return df
 
+# Supertrend (ATR-based trend indicator)
+# Phase 1 addition. Stateful per-row computation: requires per-slug loop.
+# NULL until at least atr_period+1 days of history exist.
+def calculate_supertrend(df, atr_period=10, multiplier=3.0):
+    logging.info(f"Calculating Supertrend (atr_period={atr_period}, multiplier={multiplier})")
+
+    df = df.sort_values(["slug", "timestamp"]).reset_index(drop=True)
+
+    # Local True Range and ATR (Wilder's smoothing) for this indicator only.
+    # Do not reuse columns from calculate_adx because that runs later in the pipe
+    # and uses a different ATR period.
+    prev_close = df.groupby("slug")["close"].shift(1)
+    tr_local = np.maximum(
+        df["high"] - df["low"],
+        np.maximum(
+            (df["high"] - prev_close).abs(),
+            (df["low"] - prev_close).abs()
+        )
+    )
+    atr_local = tr_local.groupby(df["slug"]).transform(
+        lambda s: s.ewm(alpha=1.0 / atr_period, adjust=False, min_periods=atr_period).mean()
+    )
+
+    hl2 = (df["high"] + df["low"]) / 2.0
+    basic_upper = hl2 + multiplier * atr_local
+    basic_lower = hl2 - multiplier * atr_local
+
+    st_line = np.full(len(df), np.nan)
+    st_dir = np.full(len(df), np.nan)
+
+    # Per-slug stateful pass
+    for slug, idx in df.groupby("slug", sort=False).indices.items():
+        idx = list(idx)
+        final_upper_prev = np.nan
+        final_lower_prev = np.nan
+        dir_prev = 1.0  # default neutral; will be overwritten on first valid row
+        close_prev = np.nan
+        first_valid = True
+
+        for i in idx:
+            bu = basic_upper.iloc[i]
+            bl = basic_lower.iloc[i]
+            close_i = df["close"].iloc[i]
+
+            if np.isnan(bu) or np.isnan(bl):
+                # ATR not yet available -> NULL per constraint #6 (no dummy data)
+                final_upper_prev = np.nan
+                final_lower_prev = np.nan
+                close_prev = close_i
+                continue
+
+            # Final upper band (sticky)
+            if np.isnan(final_upper_prev) or bu < final_upper_prev or close_prev > final_upper_prev:
+                final_upper = bu
+            else:
+                final_upper = final_upper_prev
+
+            # Final lower band (sticky)
+            if np.isnan(final_lower_prev) or bl > final_lower_prev or close_prev < final_lower_prev:
+                final_lower = bl
+            else:
+                final_lower = final_lower_prev
+
+            # Direction
+            if first_valid:
+                # Seed: use close vs hl2 to pick an initial direction
+                cur_dir = 1.0 if close_i >= hl2.iloc[i] else -1.0
+                first_valid = False
+            else:
+                if close_i > final_upper_prev:
+                    cur_dir = 1.0
+                elif close_i < final_lower_prev:
+                    cur_dir = -1.0
+                else:
+                    cur_dir = dir_prev
+
+            st_line[i] = final_lower if cur_dir == 1.0 else final_upper
+            st_dir[i] = cur_dir
+
+            final_upper_prev = final_upper
+            final_lower_prev = final_lower
+            dir_prev = cur_dir
+            close_prev = close_i
+
+    df["Supertrend_Line"] = st_line
+    df["Supertrend_Dir"] = st_dir
+    return df
+
+# Aroon (25-period default)
+# Phase 1 addition. NULL until period+1 days of history exist.
+def calculate_aroon(df, period=25):
+    logging.info(f"Calculating Aroon (period={period})")
+
+    df["Aroon_Up"] = df.groupby("slug")["high"].transform(
+        lambda s: s.rolling(period + 1, min_periods=period + 1).apply(
+            lambda w: 100.0 * w.argmax() / period, raw=True
+        )
+    )
+    df["Aroon_Down"] = df.groupby("slug")["low"].transform(
+        lambda s: s.rolling(period + 1, min_periods=period + 1).apply(
+            lambda w: 100.0 * w.argmin() / period, raw=True
+        )
+    )
+    df["Aroon_Osc"] = df["Aroon_Up"] - df["Aroon_Down"]
+    return df
+
 # 🔹 Generate Binary Signals (Oscillators)
 def generate_binary_signals_oscillators(df):
     logging.info("Generating binary signals for Oscillator indicators...")
@@ -209,6 +315,28 @@ def generate_binary_signals_oscillators(df):
     df['m_osc_uo_bin'] = np.select([df['UO'] < 33, df['UO'] > 67], [1, -1], default=0)
     df['m_osc_ao_bin'] = np.select([df['AO'] > 0, df['AO'] < 0], [1, -1], default=0)
     df['m_osc_trix_bin'] = np.select([df['TRIX'] > 0, df['TRIX'] < 0], [1, -1], default=0)
+
+    # Supertrend bin (Phase 1): continuous state, mirrors Supertrend_Dir.
+    # Default 0 when Supertrend_Dir is NaN (insufficient ATR history) to match the
+    # existing FE_OSCILLATORS_SIGNALS bigint convention (other osc bins use np.select
+    # with default=0; never NaN). The underlying Supertrend_Line / Supertrend_Dir
+    # value columns DO carry NaN when math is undefined (constraint #6).
+    df['m_osc_supertrend_bin'] = np.select(
+        [df['Supertrend_Dir'] > 0, df['Supertrend_Dir'] < 0],
+        [1, -1],
+        default=0
+    ).astype(np.int64)
+
+    # Aroon bin (Phase 1): +1 strong uptrend, -1 strong downtrend, else 0.
+    # Same default-0 convention as Supertrend bin. Underlying Aroon_Up / Aroon_Down
+    # value columns DO carry NaN when math is undefined (constraint #6).
+    df['m_osc_aroon_bin'] = np.select(
+        [(df['Aroon_Up'] >= 70) & (df['Aroon_Down'] <= 30),
+         (df['Aroon_Down'] >= 70) & (df['Aroon_Up'] <= 30)],
+        [1, -1],
+        default=0
+    ).astype(np.int64)
+
     return df
 
 # 🔹 Ensure DataFrame Columns Match Database Schema
@@ -278,6 +406,8 @@ if __name__ == "__main__":
           .pipe(calculate_ultimate_oscillator)
           .pipe(calculate_awesome_oscillator)
           .pipe(calculate_trix)
+          .pipe(calculate_supertrend)         # Phase 1
+          .pipe(calculate_aroon)              # Phase 1
           .pipe(generate_binary_signals_oscillators)
           )
 
@@ -327,7 +457,13 @@ if __name__ == "__main__":
 
     # 🔹 TRIX (Triple Exponential Moving Average)
     "EMA1", "EMA2", "EMA3",  # EMA Components for TRIX
-    "TRIX"  # TRIX Indicator
+    "TRIX",  # TRIX Indicator
+
+    # Supertrend (Phase 1)
+    "Supertrend_Line", "Supertrend_Dir",
+
+    # Aroon (Phase 1)
+    "Aroon_Up", "Aroon_Down", "Aroon_Osc"
     ]
 
     # --- Binary Oscillator Signal Columns ---
@@ -341,7 +477,11 @@ if __name__ == "__main__":
         "m_osc_adx_bin",  # ADX Strength Signal
         "m_osc_uo_bin",  # Ultimate Oscillator (UO) Signal
         "m_osc_ao_bin",  # Awesome Oscillator (AO) Signal
-        "m_osc_trix_bin"  # TRIX Trend Signal
+        "m_osc_trix_bin",  # TRIX Trend Signal
+
+        # Phase 1 additions
+        "m_osc_supertrend_bin",  # Supertrend trend state
+        "m_osc_aroon_bin"  # Aroon strong-trend state
     ]
 
     # --- Ensure Columns and select ---

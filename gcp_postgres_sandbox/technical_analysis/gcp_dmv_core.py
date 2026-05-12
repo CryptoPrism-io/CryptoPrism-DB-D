@@ -53,10 +53,13 @@ gcp_engine = create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOS
 query = """
 SELECT *
 FROM "FE_OSCILLATORS_SIGNALS" AS o
-FULL OUTER JOIN "FE_MOMENTUM_SIGNALS" AS m USING (slug, timestamp)
-FULL OUTER JOIN "FE_METRICS_SIGNAL" AS me USING (slug, timestamp)
-FULL OUTER JOIN "FE_TVV_SIGNALS" AS t USING (slug, timestamp)
-FULL OUTER JOIN "FE_RATIOS_SIGNALS" AS r USING (slug, timestamp);
+FULL OUTER JOIN "FE_MOMENTUM_SIGNALS"   AS m  USING (slug, timestamp)
+FULL OUTER JOIN "FE_METRICS_SIGNAL"     AS me USING (slug, timestamp)
+FULL OUTER JOIN "FE_TVV_SIGNALS"        AS t  USING (slug, timestamp)
+FULL OUTER JOIN "FE_RATIOS_SIGNALS"     AS r  USING (slug, timestamp)
+FULL OUTER JOIN "FE_CANDLESTICK_SIGNALS" AS c USING (slug, timestamp)
+FULL OUTER JOIN "FE_DOW_PATTERNS"        AS d USING (slug, timestamp)
+FULL OUTER JOIN "FE_PRICE_LEVELS"        AS l USING (slug, timestamp);
 """
 
 def fetch_data(query, engine):

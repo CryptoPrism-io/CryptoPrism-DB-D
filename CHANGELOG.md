@@ -6,6 +6,146 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.0] - 2026-05-11 UTC
+
+### Added
+- **Phase 2 -- Candlestick patterns (9 directional)** -- New table `FE_CANDLESTICK_SIGNALS` with 9 bigint bin columns: `m_cnd_marubozu_bin`, `m_cnd_hammer_bin`, `m_cnd_hanging_man_bin`, `m_cnd_shooting_star_bin`, `m_cnd_engulfing_bin`, `m_cnd_harami_bin`, `m_cnd_piercing_bin`, `m_cnd_dark_cloud_bin`, `m_cnd_star_bin`. Each bin in {-1, 0, +1}. Hand-coded in pure pandas/numpy to avoid TA-Lib's GHA build pain.
+  - Script: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_candle.py`
+  - Migration: `migrations/2026_05_11_phase2_candlestick.sql` (creates FE_CANDLESTICK_SIGNALS + ALTER FE_DMV_ALL)
+  - Indecision patterns (Doji, Spinning Top) intentionally excluded -- they would distort DMV bullish/bearish counts.
+- **Phase 3 -- Dow Theory price-action patterns** -- New table `FE_DOW_PATTERNS` with 2 value cols + 7 bigint bin cols:
+  - Values: `m_dow_support`, `m_dow_resistance` (twice-tested swing levels within 60-bar window)
+  - Bins: `m_dow_dbl_top_bin`, `m_dow_dbl_bot_bin`, `m_dow_trpl_top_bin`, `m_dow_trpl_bot_bin`, `m_dow_range_break_up_bin`, `m_dow_range_break_dn_bin`, `m_dow_flag_bin`
+  - Uses `scipy.signal.find_peaks` for swing detection; 2 % tolerance for "twice-tested" same-price-level patterns; 1.3x volume threshold for range breakouts; 10%+ prior move + tight 5-bar range (<=3%) for flag detection.
+  - Script: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_dow.py`
+  - Migration: `migrations/2026_05_11_phase3_dow.sql`
+- **Phase 5 -- Fibonacci retracement levels + ATR bands** -- New table `FE_PRICE_LEVELS` with 10 value cols + 2 bigint bin cols:
+  - Values: `fib_swing_low`, `fib_swing_high`, `fib_0_236`, `fib_0_382`, `fib_0_500`, `fib_0_618`, `fib_0_786`, `atr_band_mid`, `atr_band_upper`, `atr_band_lower`
+  - Bins: `m_lvl_fib_proximity_bin` (+1 within 1% of 38.2/61.8% retracement, -1 within 1% of 23.6%), `m_lvl_atr_band_bin` (+1 close below lower envelope, -1 above upper)
+  - ATR band envelope: 5-SMA(close) +/- 3 * ATR(14).
+  - Script: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_levels.py`
+  - Migration: `migrations/2026_05_11_phase5_levels.sql`
+- **Three new steps in DMV workflow** (`.github/workflows/DMV.yml`) -- gcp_dmv_candle.py, gcp_dmv_dow.py, gcp_dmv_levels.py inserted between gcp_dmv_rat.py and gcp_dmv_core.py.
+- **scipy added to requirements.txt** -- scipy>=1.13.0 for `scipy.signal.find_peaks` used by Phase 3 and Phase 5.
+
+### Changed
+- **gcp_dmv_core.py JOIN extended** -- Three new `FULL OUTER JOIN` clauses include `FE_CANDLESTICK_SIGNALS`, `FE_DOW_PATTERNS`, `FE_PRICE_LEVELS`. No other code change. The existing prefix-based D/M/V mapping absorbs all 18 new `m_*` bin columns automatically (all land in Momentum_Score).
+- **FE_DMV_ALL extended on dbcp and cp_backtest** -- 18 new bin columns added via Phase 2/3/5 migrations.
+- **Backfill loader switched to psycopg2 COPY** -- Phase 2 backfill ran in 2.59 minutes vs Phase 1's 75 minutes (30x speedup). pg8000 + pandas to_sql multi-insert was hitting the 16-bit BIND parameter cap; psycopg2 `copy_expert` with TSV-in-memory streams the entire 1.13M-row dataset in one COPY statement.
+
+### Rationale
+**Why:** Closes the indicator-gap audit from earlier today. The Zerodha Varsity Module 2 inventory listed 30+ indicators; Phase 1 (BB, Supertrend, Aroon) closed the most-cited classical indicators. Phase 2/3/5 close the remaining categories: candlestick patterns, Dow price-action, Fibonacci/volatility envelopes. After these phases, the FE_* feature set covers the full textbook indicator universe.
+
+**How to apply:** All migrations applied to dbcp and cp_backtest. Three new daily-DMV pipeline steps live in `.github/workflows/DMV.yml`. The next scheduled 05:30 UTC run will populate the new tables for today's date and feed the 18 new bins into FE_DMV_ALL. cp_backtest historical backfill via `scripts/backfill_phase2_cp_backtest.py` and `scripts/backfill_phase3_5_cp_backtest.py`.
+
+### Impact Analysis
+- New tables: 3 (FE_CANDLESTICK_SIGNALS, FE_DOW_PATTERNS, FE_PRICE_LEVELS), all PK (slug, timestamp).
+- New columns: 18 bigint bins (9 cnd + 7 dow + 2 lvl), 12 value cols (2 dow values + 10 lvl values).
+- All 18 new bins land in `Momentum_Score` via the existing prefix-mapping in `gcp_dmv_core.py`. Score denominator auto-rescales.
+- New pipeline runtime: candlestick computation ~5s, Dow patterns ~15-30s (scipy.signal per slug), Fib/ATR levels ~10s. Total DMV workflow time should increase by under 1 minute.
+- Risk: Low for Phase 2 (pure pattern detection, no state). Medium for Phase 3/5 due to scipy dependency on swing detection -- if a slug has <60 bars or unusual price action, detectors return all 0s (constraint #6: NULL/0 instead of synthetic).
+
+## [4.7.2] - 2026-05-11 UTC
+
+### Added
+- **FE_DMV_ALL extended with Phase 1 bin columns** -- New columns `m_tvv_bb_bin` (double precision), `m_osc_supertrend_bin` (bigint), `m_osc_aroon_bin` (bigint) added to `FE_DMV_ALL` on both dbcp and cp_backtest. Without this migration, `gcp_dmv_core.py` would fail on its `to_sql('FE_DMV_ALL', if_exists='append')` step because the DataFrame produced by the FULL OUTER JOIN of all five signal tables would have columns the destination table lacked.
+  - Migration: `migrations/2026_05_11_phase4_dmv_all.sql`
+  - Helper: `scripts/run_phase4_migration.py`
+
+### Rationale
+**Why:** `FE_DMV_ALL` is not schema-dynamic. Its column list is explicitly fixed by the existing schema. When `gcp_dmv_core.py` joins all 5 signal tables via `SELECT *`, any new bin column flows into the DataFrame and must exist on the destination side. Phase 1 added three new bin columns to the upstream signal tables, so this Phase 4 migration extends the downstream aggregate table to match.
+
+### Impact Analysis
+- `gcp_dmv_core.py` requires NO code change. It uses prefix-based mapping (`startswith('m_')`, `startswith('d_')`, `startswith('v_')`) so the three new `m_*` bins land automatically in the Momentum bucket; the score formula `sum / (N-1) * 100` auto-rescales as N grows.
+- All three Phase 1 bins (`m_tvv_bb_bin`, `m_osc_supertrend_bin`, `m_osc_aroon_bin`) feed into `Momentum_Score`.
+- No existing scores are recomputed by this migration alone; the change takes effect on the next daily DMV run.
+- Risk: Low. Additive schema change only.
+
+## [4.7.1] - 2026-05-11 UTC
+
+### Fixed
+- **Phase 1 bin convention aligned with each signal table's existing pattern** -- The first cut of Phase 1 propagated NaN in `m_osc_supertrend_bin` and `m_osc_aroon_bin` when the underlying Supertrend / Aroon math was undefined. That broke the bigint convention of `FE_OSCILLATORS_SIGNALS` (all six existing bins in that table use `np.select(..., default=0)` and never produce NaN). Changed to `np.select(default=0)` to match. The `m_tvv_bb_bin` column in `FE_TVV_SIGNALS` keeps NaN-propagation because that table's existing bins (e.g. `np.sign(SMA9 - SMA18)`) already propagate NaN.
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_osc.py`
+  - File: `scripts/backfill_phase1_cp_backtest.py`
+
+### Rationale
+**Why:** `gcp_dmv_core.py` filters out rows where any signal column is NaN (except bitcoin). NaN-propagating bigint bins would silently drop slugs with insufficient OHLCV history (123 of 1132 slugs in cp_backtest have <26 days). The underlying VALUE columns (`Supertrend_Line`, `Supertrend_Dir`, `Aroon_Up`, `Aroon_Down`, `Aroon_Osc`) keep their NaN to flag undefined math per constraint #6. The bins surface as 0 = "no signal" instead, matching the convention of every other osc bin.
+
+### Impact Analysis
+- Slugs with <26 days of OHLCV now receive `m_osc_*_bin = 0` instead of NULL. They stay in the DMV pipeline. Existing behaviour preserved for full-history slugs.
+- `gcp_dmv_core.py` filter at line 76 no longer drops these slugs because of the new bins.
+- `m_tvv_bb_bin` unchanged. Still NaN-propagating, matching `m_tvv_obv_1d_binary` / `d_tvv_sma9_18` etc.
+- Risk: Low. Conformance-only change.
+
+## [4.7.0] - 2026-05-11 UTC
+
+### Added
+- **Bollinger Bands (BB) added to FE_TVV / FE_TVV_SIGNALS** -- 20-period SMA with +/- 2 standard deviation envelope. New columns on FE_TVV: `BB_Mid`, `BB_Upper`, `BB_Lower`, `BB_Width`, `BB_Pct_B`. New signal on FE_TVV_SIGNALS: `m_tvv_bb_bin` (+1 if close <= lower band, -1 if close >= upper band, 0 otherwise, NULL when fewer than 20 days of history).
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_tvv.py` -- new `calculate_bollinger_bands()` function piped after `calculate_cmf`; BB columns appended to `REQUIRED_COLUMNS` and `m_tvv_bb_bin` to `REQUIRED_SIGNAL_COLUMNS`.
+  - Migration: `migrations/2026_05_11_phase1_bb.sql` -- idempotent ADD COLUMN IF NOT EXISTS. Must run on dbcp and cp_backtest before deploying the script.
+- **Supertrend (ATR 10, multiplier 3.0) added to FE_OSCILLATOR / FE_OSCILLATORS_SIGNALS** -- Classic ATR-trailing-band trend indicator. New columns on FE_OSCILLATOR: `Supertrend_Line`, `Supertrend_Dir`. New signal on FE_OSCILLATORS_SIGNALS: `m_osc_supertrend_bin` (+1 uptrend, -1 downtrend, NULL when ATR history insufficient).
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_osc.py` -- new `calculate_supertrend()` function (per-slug stateful pass) piped after `calculate_trix`; columns appended to `oscillator_cols` and `oscillator_signals_cols`.
+- **Aroon (25-period) added to FE_OSCILLATOR / FE_OSCILLATORS_SIGNALS** -- Time-relative-to-price trend indicator. New columns on FE_OSCILLATOR: `Aroon_Up`, `Aroon_Down`, `Aroon_Osc`. New signal on FE_OSCILLATORS_SIGNALS: `m_osc_aroon_bin` (+1 if Aroon_Up >= 70 and Aroon_Down <= 30; -1 if Aroon_Down >= 70 and Aroon_Up <= 30; 0 otherwise; NULL when fewer than 26 days of history).
+  - File: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_osc.py` -- new `calculate_aroon()` function piped after `calculate_supertrend`.
+  - Migration: `migrations/2026_05_11_phase1_supertrend_aroon.sql` -- idempotent. Must run on dbcp and cp_backtest before deploying the script.
+
+### Rationale
+**Why:** Audit against the Zerodha Varsity Module 2 (Technical Analysis) indicator inventory identified Bollinger Bands, Supertrend, and Aroon as the three highest-citation classical indicators absent from the FE_* feature set. Adding them brings the GCP feature surface in line with the textbook indicator universe.
+
+**How to apply:** No CRON schedule changes. The new functions slot into the existing DMV pipeline (gcp_dmv_tvv.py and gcp_dmv_osc.py) which already runs once per day after OHLCV ingestion. Migrations run idempotently. Constraint #6 honoured throughout: when a slug has insufficient OHLCV history (BB <20 days, Aroon <26 days, Supertrend ATR not yet stabilised), the indicator value AND its `_bin` signal are written as NULL, not synthesised.
+
+### Impact Analysis
+- FE_TVV: 5 new value columns. Row count unchanged.
+- FE_TVV_SIGNALS: 1 new signal column (`m_tvv_bb_bin`).
+- FE_OSCILLATOR: 5 new value columns.
+- FE_OSCILLATORS_SIGNALS: 2 new signal columns (`m_osc_supertrend_bin`, `m_osc_aroon_bin`).
+- gcp_dmv_core.py: NOT modified yet. Three new `_bin` columns now exist in upstream signal tables. The current aggregation in `gcp_dmv_core.py` selects bin columns by name; until that selection is extended, the new signals do not yet contribute to FE_DMV_ALL counts or FE_DMV_SCORES. Phase 4 (planned) will integrate them with re-calibrated D/M/V weights.
+- New coins with <20 (BB) or <26 (Aroon) days of OHLCV produce NULL in the new columns. This matches the "no dummy data" constraint and prevents misleading signals on freshly listed assets.
+- Supertrend uses its own local ATR (period 10) so it does not interfere with the existing ADX(14) ATR in `calculate_adx`.
+- Risk: Low. Additive only -- no existing columns modified, no DMV scores changed. The first daily DMV run after deploy will TRUNCATE+INSERT into FE_TVV / FE_OSCILLATOR with the new columns populated.
+
+## [4.6.1] - 2026-04-20 UTC
+
+### Fixed
+- **Bitcoin and other coins missing from FE_MOMENTUM_SIGNALS, FE_OSCILLATORS_SIGNALS, FE_TVV_SIGNALS, and FE_DMV_ALL** -- The global `df['timestamp'].max()` filter kept only rows matching the single newest timestamp across all ~1000 coins. Any coin whose latest OHLCV record was even one day behind the global max was silently dropped. Replaced with per-slug latest: `df.loc[df.groupby('slug')['timestamp'].idxmax()]` in gcp_dmv_mom.py, gcp_dmv_osc.py, gcp_dmv_tvv.py, and gcp_dmv_core.py.
+  - Files: `gcp_postgres_sandbox/technical_analysis/gcp_dmv_mom.py`, `gcp_dmv_osc.py`, `gcp_dmv_tvv.py`, `gcp_dmv_core.py`
+  - Commit: `4223a87`
+
+### Rationale
+The R script (`gcp_108k_1kcoins.R`) fetches OHLCV data via the crypto2 package. If any coin receives a newer timestamp than others (e.g., API returns data for a more recent UTC date depending on fetch timing), the global-max filter discards all other coins. In production, this reduced FE_* signal tables from ~1000 rows to as few as 1. The per-slug approach (already used in `gcp_dmv_met.py`) retains all coins regardless of minor timestamp differences.
+
+### Impact Analysis
+- All ~1000 coins now retained in FE_MOMENTUM_SIGNALS, FE_OSCILLATORS_SIGNALS, FE_TVV_SIGNALS, FE_DMV_ALL, FE_DMV_SCORES
+- Bitcoin now has valid momentum/oscillator/TVV indicators (ratios still excluded -- Bitcoin is the benchmark)
+- gcp_dmv_core.py simplified: removed the special `.eq('bitcoin')` filter since Bitcoin rows now exist naturally
+- Risk: Low. The per-slug approach is strictly more inclusive; no data is lost
+
+## [4.6.0] - 2026-04-17 UTC
+
+### Added
+- **ONCHAIN_BLOCKED workflow** (`.github/workflows/ONCHAIN_BLOCKED.yml`) -- Daily on-chain active address refresh for Solana, NEAR, and MultiversX. These 3 chains use community BigQuery datasets that block Cloud Run service accounts (bigquery-public-data ACL restriction), so this workflow authenticates via Workload Identity Federation instead.
+  - Triggers: After DMV workflow completes, or manual dispatch with configurable backfill days
+  - Writes to: `onchain_daily_metrics` table in dbcp
+  - Chains: SOL (~1.49M active addrs/day), NEAR (~48K), MultiversX (~29K)
+  - Commit: `b5f790a`
+- **On-chain blocked chains script** (`scripts/onchain_blocked_chains.py`) -- Queries BigQuery Token Transfers tables for active address counts per chain per day.
+  - Commit: `b5f790a`
+
+### Changed
+- **Solana query optimization** -- Switched from `UNNEST(accounts)` on the 786 TB Transactions table to querying the Token Transfers table (source + destination columns). Cost reduced from $2.69/day to $0.04/day (98% reduction). Token transfer senders (5.2M/day) + receivers (5.9M/day) is also a better active user signal than raw transaction signers.
+  - File: `scripts/onchain_blocked_chains.py`
+  - Commit: `8b11556`
+
+### Rationale
+The CryptoPrism on-chain pipeline (Cloud Run) handles most chains, but SOL/NEAR/MVX fail with permission errors due to dataset-level ACL restrictions on bigquery-public-data. Running via GitHub Actions with Workload Identity Federation bypasses this limitation. The Solana optimization was necessary because the original query scanned 786 TB/day -- unsustainable at $2.69/query.
+
+### Impact Analysis
+- New daily pipeline step after DMV: LISTINGS -> OHLCV -> DMV -> ONCHAIN_BLOCKED
+- No changes to existing pipeline scripts or timing
+- dbcp `onchain_daily_metrics` table updated with SOL/NEAR/MVX active address data
+- BigQuery cost: ~$0.12/day for all 3 chains combined (previously $2.69 for SOL alone)
+- Risk: Low. New workflow is additive; existing pipeline unaffected
+
 ## [4.5.3] - 2026-04-11 UTC
 
 ### Fixed
