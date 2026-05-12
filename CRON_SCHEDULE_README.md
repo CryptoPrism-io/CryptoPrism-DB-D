@@ -14,6 +14,7 @@ Comprehensive reference for all GitHub Actions workflows, their scheduling, depe
 | **Environment Test (Python)** | 06:00 Daily | 11:30 Daily | Daily | Scheduled | ✅ Active |
 | **Environment Test (R)** | 06:30 Daily | 12:00 Daily | Daily | Scheduled | ✅ Active |
 | **QA_Telegram** | Manual Only | Manual Only | On-Demand | Manual | ⚠️ Manual |
+| **ONCHAIN_BLOCKED** | After DMV | ~07:00-07:30 | Daily | Sequential | ✅ Active |
 | **BACKFILL_CP_BACKTEST** | Manual Only | Manual Only | One-Time | Manual | ⚠️ Manual |
 | **TEST_DEV** | On Push | On Push | Event-Based | Development | 🔧 Dev Only |
 
@@ -25,6 +26,7 @@ Comprehensive reference for all GitHub Actions workflows, their scheduling, depe
 graph TD
     A[LISTINGS - 00:05 UTC] --> B[OHLCV - Sequential]
     B --> C[DMV - Sequential]
+    C --> H[ONCHAIN_BLOCKED - Sequential]
     C --> D[QA_Telegram - Manual]
     
     E[Environment Test Python - 06:00 UTC] 
@@ -34,6 +36,7 @@ graph TD
     style A fill:#e1f5fe
     style B fill:#e8f5e8
     style C fill:#fff3e0
+    style H fill:#e8eaf6
     style D fill:#ffebee
     style E fill:#f3e5f5
     style F fill:#f3e5f5
@@ -68,12 +71,15 @@ graph TD
 - **Scripts Executed** (in order):
   1. `gcp_postgres_sandbox/data_ingestion/gcp_fear_greed_cmc.py` - Market sentiment
   2. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_met.py` - Fundamental metrics
-  3. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_tvv.py` - Volume/trend analysis
+  3. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_tvv.py` - Volume/trend analysis (incl. Bollinger Bands from v4.7.0)
   4. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_pct.py` - Risk/volatility metrics
   5. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_mom.py` - Momentum indicators
-  6. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_osc.py` - Technical oscillators
+  6. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_osc.py` - Technical oscillators (incl. Supertrend, Aroon from v4.7.0)
   7. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_rat.py` - Financial ratios
-  8. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_core.py` - **Final aggregation**
+  8. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_candle.py` - Candlestick patterns (9 directional) -- v4.8.0
+  9. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_dow.py` - Dow Theory price-action (S/R, double/triple tops, breakouts, flag) -- v4.8.0
+  10. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_levels.py` - Fibonacci levels + ATR bands -- v4.8.0
+  11. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_core.py` - **Final aggregation**
 - **Purpose**: Complete technical analysis with 100+ indicators
 - **Duration**: ~45-60 minutes
 
@@ -108,7 +114,18 @@ graph TD
 - **Timeout**: 6 hours
 - **Note**: One-time recovery script. Run once to backfill, then daily pipeline accumulates.
 
-### 8. **TEST_DEV** - Development Validation
+### 8. **ONCHAIN_BLOCKED** - Blocked Chain On-Chain Metrics
+- **File**: `.github/workflows/ONCHAIN_BLOCKED.yml`
+- **Schedule**: `workflow_run: ["DMV"]` (Sequential after DMV)
+- **Estimated Time**: ~07:00-07:30 IST (06:30-07:00 UTC)
+- **Primary Script**: `scripts/onchain_blocked_chains.py`
+- **Purpose**: Fetch daily active address counts for SOL, NEAR, MultiversX from BigQuery (chains that block Cloud Run service accounts)
+- **Duration**: ~5-10 minutes
+- **Authentication**: Workload Identity Federation (not service account key)
+- **Manual Dispatch**: Supports custom `days` parameter for backfill
+- **Writes to**: `onchain_daily_metrics` table in dbcp
+
+### 9. **TEST_DEV** - Development Validation
 - **File**: `.github/workflows/TEST_DEV.yml`
 - **Schedule**: `push: dev_ai_code_branch` + `workflow_dispatch`
 - **Primary Script**: `gcp_postgres_sandbox/data_ingestion/cmc_listings.py` (test execution)
@@ -146,6 +163,7 @@ graph TD
 - ✅ **OHLCV** - Has `workflow_dispatch` 
 - ✅ **DMV** - Has `workflow_dispatch`
 - ✅ **QA_Telegram** - Manual only
+- ✅ **ONCHAIN_BLOCKED** - Has `workflow_dispatch` (custom days parameter)
 - ✅ **BACKFILL_CP_BACKTEST** - Manual only (one-time recovery)
 - ✅ **TEST_DEV** - Has `workflow_dispatch`
 - ❌ **Environment Tests** - Schedule only (no manual trigger)
@@ -162,6 +180,8 @@ OHLCV (Historical Price Data)
     ↓  
 DMV (Technical Analysis)
     ↓
+ONCHAIN_BLOCKED (SOL/NEAR/MVX Active Addresses)
+    ↓
 QA_Telegram (Quality Assurance) [Manual]
 ```
 
@@ -173,7 +193,8 @@ QA_Telegram (Quality Assurance) [Manual]
 1. **LISTINGS** → Updates `crypto_listings_latest_1000` table
 2. **OHLCV** → Updates `1K_coins_ohlcv` table
 3. **DMV** → Updates all technical analysis tables (`FE_*` prefix)
-4. **QA** → Reads from all databases for validation
+4. **ONCHAIN_BLOCKED** → Updates `onchain_daily_metrics` table (SOL/NEAR/MVX)
+5. **QA** → Reads from all databases for validation
 
 ---
 
@@ -199,13 +220,23 @@ QA_Telegram (Quality Assurance) [Manual]
 
 ### Technical Analysis Scripts (All in DMV workflow):
 - `technical_analysis/gcp_dmv_met.py` → Fundamental metrics
-- `technical_analysis/gcp_dmv_tvv.py` → Volume/value analysis
+- `technical_analysis/gcp_dmv_tvv.py` → Volume/value analysis + Bollinger Bands (v4.7.0)
 - `technical_analysis/gcp_dmv_pct.py` → Risk metrics
 - `technical_analysis/gcp_dmv_mom.py` → Momentum indicators
-- `technical_analysis/gcp_dmv_osc.py` → Oscillators
+- `technical_analysis/gcp_dmv_osc.py` → Oscillators + Supertrend + Aroon (v4.7.0)
 - `technical_analysis/gcp_dmv_rat.py` → Financial ratios
+- `technical_analysis/gcp_dmv_candle.py` → Candlestick patterns (v4.8.0)
+- `technical_analysis/gcp_dmv_dow.py` → Dow Theory price-action (v4.8.0)
+- `technical_analysis/gcp_dmv_levels.py` → Fibonacci + ATR bands (v4.8.0)
 - `technical_analysis/gcp_dmv_core.py` → **Final aggregation** (must run last)
+
+### On-Chain Scripts:
+- `scripts/onchain_blocked_chains.py` → **ONCHAIN_BLOCKED** workflow (SOL/NEAR/MVX)
 
 ### Quality Assurance Scripts:
 - `quality_assurance/prod_qa_dbcp.py` → **QA_Telegram** workflow (active)
 - `quality_assurance/prod_qa_cp_ai.py` → **QA_Telegram** workflow (commented)
+
+---
+
+**Last updated**: 2026-05-11 (v4.8.0 — Candlestick patterns + Dow Theory + Fibonacci/ATR levels added. 3 new pipeline steps. No schedule timing changes.)

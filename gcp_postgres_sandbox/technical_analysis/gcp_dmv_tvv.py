@@ -140,6 +140,24 @@ def calculate_vwap(df):
     
     return df
 
+# Bollinger Bands (20-period SMA +/- 2 standard deviations)
+# Phase 1 addition. NULL until 20 days of history are available (no dummy data).
+def calculate_bollinger_bands(df, period=20, num_std=2.0):
+    logging.info(f"Calculating Bollinger Bands (period={period}, num_std={num_std})...")
+
+    df["BB_Mid"] = df.groupby("slug")["close"].transform(
+        lambda s: s.rolling(period, min_periods=period).mean()
+    )
+    rolling_std = df.groupby("slug")["close"].transform(
+        lambda s: s.rolling(period, min_periods=period).std()
+    )
+    df["BB_Upper"] = df["BB_Mid"] + num_std * rolling_std
+    df["BB_Lower"] = df["BB_Mid"] - num_std * rolling_std
+    df["BB_Width"] = (df["BB_Upper"] - df["BB_Lower"]) / df["BB_Mid"]
+    df["BB_Pct_B"] = (df["close"] - df["BB_Lower"]) / (df["BB_Upper"] - df["BB_Lower"])
+
+    return df
+
 # 🔹 CMF & ADL Calculation
 def calculate_cmf(df, period=21):
     logging.info("Calculating CMF & ADL...")
@@ -182,7 +200,10 @@ def ensure_required_columns(df):
 
     # 🔹 VWAP & CMF
     "typical_price", "cum_price_volume", "cum_volume", "VWAP",
-    "ADL", "cum_adl", "CMF"
+    "ADL", "cum_adl", "CMF",
+
+    # Bollinger Bands (Phase 1)
+    "BB_Mid", "BB_Upper", "BB_Lower", "BB_Width", "BB_Pct_B"
 ]
 
 
@@ -199,7 +220,14 @@ def generate_binary_signals(df):
     df["d_tvv_ema21_108"] = np.sign(df["EMA21"] - df["EMA108"])
     df["m_tvv_cmf"] = np.sign(df["CMF"])
 
-    return df    
+    # Bollinger Band signal: +1 if close <= lower band (oversold),
+    # -1 if close >= upper band (overbought), 0 otherwise. NULL if BB_Mid is NaN.
+    bb_bin = np.where(df["close"] <= df["BB_Lower"], 1,
+              np.where(df["close"] >= df["BB_Upper"], -1, 0)).astype(float)
+    bb_bin[df["BB_Mid"].isna().to_numpy()] = np.nan
+    df["m_tvv_bb_bin"] = bb_bin
+
+    return df
 
 # 🔹 Ensure TVV Signals Required Columns Exist
 def ensure_signals_columns(df):
@@ -215,7 +243,10 @@ def ensure_signals_columns(df):
         "d_tvv_sma21_108", "d_tvv_ema21_108",
         
         # 🔹 CMF-Based Signal
-        "m_tvv_cmf"
+        "m_tvv_cmf",
+
+        # Bollinger Band signal (Phase 1)
+        "m_tvv_bb_bin"
     ]
     
     # Ensure only existing columns are selected (prevent KeyErrors)
@@ -263,6 +294,7 @@ if __name__ == "__main__":
            .pipe(calculate_channels)      # ✅ Added Keltner & Donchian calculation
            .pipe(calculate_vwap)          # ✅ Added VWAP calculation
            .pipe(calculate_cmf)
+           .pipe(calculate_bollinger_bands)  # Phase 1: BB after CMF
            .pipe(generate_binary_signals))
 
     # Keep latest timestamp PER SLUG to avoid dropping coins with slightly older data

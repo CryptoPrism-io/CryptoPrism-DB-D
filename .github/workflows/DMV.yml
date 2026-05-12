@@ -175,6 +175,54 @@ jobs:
         run: python gcp_postgres_sandbox/technical_analysis/gcp_dmv_rat.py
         continue-on-error: false
 
+      - name: Run gcp_dmv_candle.py
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_NAME_BT: ${{ secrets.DB_NAME_BT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_URL: ${{ secrets.DB_URL }}
+          CMC_API_KEY: ${{ secrets.CMC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python gcp_postgres_sandbox/technical_analysis/gcp_dmv_candle.py
+        continue-on-error: false
+
+      - name: Run gcp_dmv_dow.py
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_NAME_BT: ${{ secrets.DB_NAME_BT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_URL: ${{ secrets.DB_URL }}
+          CMC_API_KEY: ${{ secrets.CMC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python gcp_postgres_sandbox/technical_analysis/gcp_dmv_dow.py
+        continue-on-error: false
+
+      - name: Run gcp_dmv_levels.py
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_NAME_BT: ${{ secrets.DB_NAME_BT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_URL: ${{ secrets.DB_URL }}
+          CMC_API_KEY: ${{ secrets.CMC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python gcp_postgres_sandbox/technical_analysis/gcp_dmv_levels.py
+        continue-on-error: false
+
       - name: Run gcp_dmv_core.py
         env:
           # Database configuration
