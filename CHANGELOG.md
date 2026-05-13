@@ -23,8 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Risk: Low. Behavioral semantics unchanged -- still TRUNCATE+INSERT (or DELETE-by-timestamp+INSERT for cp_backtest); only the INSERT batching strategy changed. No row-count or column-value differences.
 - Expected daily DMV workflow runtime reduction: 5-10 minutes total.
 - Validated: `gcp_dmv_tvv.py` end-to-end against dbcp + cp_backtest on 2026-05-13, 3.64 min total runtime, both tables refilled with 1000 / 1,127,277 rows respectively. Other scripts share the identical write pattern -- same fix mechanism.
-- Parallel work in PR #33 (v4.8.1) fixes the unrelated NaN filter in `gcp_dmv_core.py:79`. Order-independent.
 - The `backups/` directory was intentionally not touched.
+
+## [4.8.1] - 2026-05-13 UTC
+
+### Fixed
+- **gcp_dmv_core.py: NaN filter was collapsing FE_DMV_ALL to a single row.** The pre-existing filter `d[d['slug'].eq('bitcoin') | d.drop(columns='slug').notna().all(axis=1)]` kept only rows where every column was non-null (with a hard-coded bitcoin short-circuit). After v4.8.0 extended the JOIN to include `FE_CANDLESTICK_SIGNALS`, `FE_DOW_PATTERNS`, and `FE_PRICE_LEVELS`, any slug with a NaN in any of the 60+ joined columns -- including all slugs on the first run before `FE_DOW_PATTERNS` / `FE_PRICE_LEVELS` were populated -- got dropped. Observed effect on dbcp after the 2026-05-12 04:36 UTC cron run: `FE_DMV_ALL` had 1 row (bitcoin), `FE_DMV_SCORES` had 1 row. Replaced the filter with `dropna(subset=['slug','timestamp'])` -- defensive against pathological JOIN output but no longer drops slugs because an indicator returned NaN. The subsequent `.fillna(0)` already converts NaN signals to neutral, which is the intended downstream behavior.
+
+### Rationale
+**Why:** The bitcoin short-circuit was a smoking-gun -- the original author had hit this exact failure mode at least once and patched it for BTC only instead of fixing the rule. With 8 joined signal tables and 60+ columns, the probability of *every* column being non-null for *every* slug is low (newer coins lack history for long-period indicators like 200-day ROC). The combination of `FULL OUTER JOIN` (produces NaN for missing slug-timestamp pairs) + strict `notna().all()` filter is a guarantee of data loss whenever any upstream table lags. The fix aligns the filter with the existing `fillna(0)` semantics: missing indicator = neutral signal = 0.
+
+**How to apply:** No migration required. Pure code change. The next daily DMV cron run (2026-05-13 ~04:30 UTC) will write FE_DMV_ALL with ~1000 rows instead of 1. The cp_backtest write path (DELETE-by-timestamp + INSERT) was already correct and is unaffected.
+
+### Impact Analysis
+- Risk: Low. Removes a filter that was discarding ~99.9% of rows on dbcp. Behavioral change is "more data flows through", not "different data".
+- Downstream: FE_DMV_ALL and FE_DMV_SCORES will go from 1 row to ~1000 rows daily on dbcp. cp_backtest historical row counts unaffected (the filter ran in both paths but per-day timestamp delete-and-replace meant only the latest day was affected, and only 1 slug -- bitcoin -- survived; older days persisted from earlier runs).
+- The `.iloc[:, 4:]` bullish/bearish/neutral counter (line 86) still works because all non-id columns are signal columns and NaN-filled-to-0 counts as neutral. This is the intended semantics.
 
 ## [4.8.0] - 2026-05-11 UTC
 

@@ -76,7 +76,7 @@ if df.empty:
     exit(1)
 df = (
     df.loc[:, ~df.columns.duplicated()]
-      .pipe(lambda d: d[d['slug'].eq('bitcoin') | d.drop(columns='slug').notna().all(axis=1)])
+      .dropna(subset=['slug', 'timestamp'])
       .fillna(0)
 )
 
