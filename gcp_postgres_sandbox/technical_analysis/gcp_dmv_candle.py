@@ -355,7 +355,7 @@ if __name__ == "__main__":
 
     # id column may not exist in source OHLCV; ensure it as nullable so to_sql does not fail
     if "id" not in latest.columns:
-        latest["id"] = pd.NA
+        latest["id"] = pd.array([pd.NA] * len(latest), dtype="Int64")
 
     out = latest[REQUIRED_COLUMNS].copy()
 

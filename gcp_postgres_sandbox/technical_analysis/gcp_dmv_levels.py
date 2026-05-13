@@ -219,7 +219,7 @@ if __name__ == "__main__":
     for c in BIN_COLS:
         out[c] = out[c].astype("Int64")
 
-    out["id"] = pd.NA
+    out["id"] = pd.array([pd.NA] * len(out), dtype="Int64")
     out = out[["id", "slug", "timestamp"] + VALUE_COLS + BIN_COLS]
 
     push_to_db(out, "FE_PRICE_LEVELS", engine)

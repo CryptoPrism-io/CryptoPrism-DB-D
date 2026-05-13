@@ -6,6 +6,23 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.4] - 2026-05-13 UTC
+
+### Fixed
+- **gcp_dmv_dow.py / gcp_dmv_levels.py / gcp_dmv_candle.py: `out["id"] = pd.NA` was producing an `object` dtype column of Python `None` values that pg8000 could not bind for a `bigint` destination column.** The INSERT failed; pg8000 again hid the underlying error behind "in failed transaction block". Replaced with `out["id"] = pd.array([pd.NA] * len(out), dtype="Int64")` so the column is a proper pandas nullable Int64.
+
+### Rationale
+**Why:** All three new v4.8.0 scripts assign a placeholder `id` because the destination FE_* tables expect an `id` column (carried through from OHLCV-derived feature tables), but the scripts compute one-row-per-slug aggregates and don't have a meaningful id to write. The intent was "leave id as NULL". The original `out["id"] = pd.NA` looks correct at first glance, but on a new column with no prior dtype, pandas falls back to `object` and fills with Python `None` objects -- which pg8000 refuses to bind for a numeric column.
+
+The candle script had this same line but inside `if "id" not in latest.columns`, which never fires because the upstream OHLCV table always has `id` -- the bug was latent there. Dow and levels assign unconditionally, so they failed every run. The bug was masked until today because the new scripts had never executed end-to-end (PR #32 merged after the daily cron, and the local validation step skipped them).
+
+**How to apply:** Pure code change. Three one-line edits. No DDL.
+
+### Impact Analysis
+- Risk: Low. Behavioral change: previously the INSERT to FE_DOW_PATTERNS / FE_PRICE_LEVELS raised an error and the script aborted. Now it succeeds, writing rows with `id=NULL` (matching the existing schema's nullability).
+- Validated: full chain `gcp_dmv_dow.py -> gcp_dmv_levels.py -> gcp_dmv_core.py` on 2026-05-13 against dbcp + cp_backtest. Runtime 5.06 min total. All four downstream tables now hold 1000 rows at timestamp 2026-05-12 (previously 0 for dow/levels, 2000 stale-day rows for FE_DMV_ALL).
+- pg8000's "in failed transaction block" error message remains a frustration -- it surfaces only at commit time and offers no detail on the actual bind failure. Diagnostic required a probe script that attempted a 5-row insert with dtype variants (Object vs Int64 with NA vs drop column).
+
 ## [4.8.3] - 2026-05-13 UTC
 
 ### Fixed
