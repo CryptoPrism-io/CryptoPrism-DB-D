@@ -193,7 +193,7 @@ def push_to_db(df, table_name, engine, if_exists="replace"):
             with engine.connect() as conn:
                 conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
                 conn.commit()
-            df.to_sql(table_name, con=engine, if_exists="append", index=False)
+            df.to_sql(table_name, con=engine, if_exists="append", index=False, method="multi", chunksize=200)
         else:
             # Backtest DB: DELETE matching timestamps first to prevent duplicates
             if 'timestamp' in df.columns:
@@ -205,7 +205,7 @@ def push_to_db(df, table_name, engine, if_exists="replace"):
                             {"ts": ts}
                         )
                     conn.commit()
-            df.to_sql(table_name, con=engine, if_exists="append", index=False)
+            df.to_sql(table_name, con=engine, if_exists="append", index=False, method="multi", chunksize=200)
         logging.info(f"{table_name} uploaded successfully!")
     except Exception as e:
         logging.error(f"Error pushing data to {table_name}: {e}")

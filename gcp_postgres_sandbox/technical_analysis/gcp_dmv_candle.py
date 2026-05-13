@@ -324,7 +324,7 @@ def push_to_db(df, table_name, engine):
     with engine.connect() as conn:
         conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
         conn.commit()
-    df.to_sql(table_name, con=engine, if_exists="append", index=False)
+    df.to_sql(table_name, con=engine, if_exists="append", index=False, method="multi", chunksize=200)
     logger.info(f"{table_name} (dbcp) uploaded.")
 
 
@@ -338,7 +338,7 @@ def push_to_db_backtest(df, table_name, engine):
                     {"ts": ts},
                 )
             conn.commit()
-    df.to_sql(table_name, con=engine, if_exists="append", index=False)
+    df.to_sql(table_name, con=engine, if_exists="append", index=False, method="multi", chunksize=200)
     logger.info(f"{table_name} (cp_backtest) appended.")
 
 
