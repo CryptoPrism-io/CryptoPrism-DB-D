@@ -6,6 +6,22 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.3] - 2026-05-13 UTC
+
+### Fixed
+- **gcp_dmv_core.py: INSERT to FE_DMV_ALL failed silently with "in failed transaction block" because the JOIN's `SELECT *` pulled 12 value columns that FE_DMV_ALL's schema does not have.** v4.8.0 added `FE_DOW_PATTERNS` and `FE_PRICE_LEVELS` to the FULL OUTER JOIN. Those upstream tables carry value columns (`m_dow_support`, `m_dow_resistance`, `fib_swing_low`, `fib_swing_high`, `fib_0_236`, `fib_0_382`, `fib_0_500`, `fib_0_618`, `fib_0_786`, `atr_band_mid`, `atr_band_upper`, `atr_band_lower`) alongside their bin signal columns. The Phase 4/5 migrations intentionally added only the bin columns to FE_DMV_ALL (signal-only design), but `SELECT *` flows everything through. pg8000 swallowed the original Postgres error and only surfaced "in failed transaction block" on commit, making the failure mode invisible until probed.
+- Added a dynamic schema filter that reads `information_schema.columns` for FE_DMV_ALL and trims the DataFrame to only those columns before the TRUNCATE+INSERT. Robust to future upstream column additions.
+
+### Rationale
+**Why:** This was the second layer of bugs on top of v4.8.1. After v4.8.1 fixed the NaN-filter that was collapsing FE_DMV_ALL to 1 row, the manual `gcp_dmv_core.py` re-run still failed -- the underlying mismatch had been masked by the 1-row filter (yesterday's run wrote bitcoin only, so the column-mismatch only became fatal once 1000+ rows were being inserted). pg8000's "in failed transaction block" error message is genuinely unhelpful here; a probe script that attempts a single-row insert was needed to surface the real cause.
+
+**How to apply:** Pure code change. No DDL. The script now self-discovers which columns FE_DMV_ALL actually has and inserts only those.
+
+### Impact Analysis
+- Risk: Low. Behavioral change: previously the script raised on second-row INSERT in any environment where dow/levels signal tables were populated and `SELECT *` pulled their value columns through. Now those value columns are dropped before INSERT.
+- Validated: manual `gcp_dmv_core.py` run on 2026-05-13 against dbcp + cp_backtest, 2.07 min runtime. `FE_DMV_ALL` and `FE_DMV_SCORES` both populated with 2000 rows on dbcp (1013 distinct slugs across the JOIN's timestamp window). Score distribution: avg Durability=21.59, Momentum=3.43, Valuation=25.63; Momentum range -36.84 to +36.84.
+- Future-proof: the value cols `m_dow_support` and `m_dow_resistance` are prefixed `m_dow_` and would have been picked up by `Momentum.startswith('m_')` and polluted the Momentum_Score with raw price values (50,000+) instead of clean -1/0/+1 bins. The schema filter removes them before score calc as a side effect.
+
 ## [4.8.2] - 2026-05-13 UTC
 
 ### Changed
