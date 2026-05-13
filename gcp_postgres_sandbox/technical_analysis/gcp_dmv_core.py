@@ -88,6 +88,16 @@ for index, row in df.iloc[:, 4:].iterrows():
     df.at[index, 'bearish'] = (row == -1).sum()
     df.at[index, 'neutral'] = (row == 0).sum()
 
+# Filter df to columns present in FE_DMV_ALL. Upstream signal tables
+# (FE_DOW_PATTERNS, FE_PRICE_LEVELS) carry value columns alongside bins; the
+# JOIN's SELECT * pulls them through but FE_DMV_ALL is intentionally bin-only.
+with gcp_engine.connect() as conn:
+    fe_dmv_all_cols = {r[0] for r in conn.execute(text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='FE_DMV_ALL'"
+    )).fetchall()}
+df = df[[c for c in df.columns if c in fe_dmv_all_cols]]
+
 # TRUNCATE and INSERT for FE_DMV_ALL
 with gcp_engine.connect() as conn:
     conn.execute(text('TRUNCATE TABLE "FE_DMV_ALL"'))
