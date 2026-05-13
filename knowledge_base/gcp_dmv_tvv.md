@@ -75,6 +75,25 @@ def calculate_donchian_channels(df, period=21):
 - **Trend Following**: Breakouts above/below channels signal trend continuation
 - **Support/Resistance**: Channel boundaries act as dynamic support/resistance
 
+#### **6. Bollinger Bands (v4.7.0)**
+```python
+def calculate_bollinger_bands(df, period=20, num_std=2.0):
+    df["BB_Mid"]   = df.groupby("slug")["close"].transform(
+        lambda s: s.rolling(period, min_periods=period).mean())
+    rolling_std    = df.groupby("slug")["close"].transform(
+        lambda s: s.rolling(period, min_periods=period).std())
+    df["BB_Upper"] = df["BB_Mid"] + num_std * rolling_std
+    df["BB_Lower"] = df["BB_Mid"] - num_std * rolling_std
+    df["BB_Width"] = (df["BB_Upper"] - df["BB_Lower"]) / df["BB_Mid"]
+    df["BB_Pct_B"] = (df["close"] - df["BB_Lower"]) / (df["BB_Upper"] - df["BB_Lower"])
+```
+- **Output columns** (in `FE_TVV`): `BB_Mid`, `BB_Upper`, `BB_Lower`, `BB_Width`, `BB_Pct_B`
+- **Bin signal**: `m_tvv_bb_bin` (double precision, NaN-propagating) in `FE_TVV_SIGNALS`:
+  - +1 when close > BB_Upper (overbought / strong uptrend continuation)
+  - -1 when close < BB_Lower (oversold / strong downtrend continuation)
+  - 0 inside the bands
+- **Convention note (v4.7.1)**: FE_TVV_SIGNALS is `double precision` and preserves NaN propagation. Bigint signal tables (FE_OSCILLATORS_SIGNALS etc.) use `np.select(default=0)` instead. Both conventions are intentional and CHANGELOG-documented.
+
 ### **Binary Signal Generation**
 ```python
 # Volume-based signals
@@ -119,3 +138,7 @@ python gcp_postgres_sandbox/gcp_dmv_tvv.py
 4. **Channel Analysis**: Keltner and Donchian channel systems
 5. **Signal Generation**: Volume and trend-based binary signals
 6. **Dual Database Output**: Production and backtesting data separation
+
+## Recent Changes
+- **v4.8.2** (2026-05-13): Both `push_to_db` paths now use `method="multi", chunksize=200` on the `to_sql` call. Full pipeline (data fetch + indicator compute + 4 table writes) drops from ~14 min to ~3.6 min.
+- **v4.7.0** (2026-05-11): Added Bollinger Bands (`BB_Mid/Upper/Lower/Width/Pct_B` value columns + `m_tvv_bb_bin` signal). See section "6. Bollinger Bands" above.

@@ -166,3 +166,6 @@ CREATE TABLE FE_PCT (
 5. **Data Quality Assurance**: Comprehensive cleaning and validation pipeline
 6. **Dual Database Architecture**: Production and backtesting data separation
 7. **Performance Monitoring**: Runtime tracking and optimization capabilities
+
+## Recent Changes
+- **v4.8.2** (2026-05-13): Both `to_sql` calls (FE_PCT to dbcp + cp_backtest) now use `method='multi', chunksize=200` -- ~10x faster writes.

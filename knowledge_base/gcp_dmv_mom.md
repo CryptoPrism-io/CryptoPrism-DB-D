@@ -147,3 +147,6 @@ tsi, momentum_10, [additional momentum metrics...]
 slug, timestamp, m_rsi_9_signal, m_rsi_54_signal,
 m_williams_r_signal, m_roc_signal, m_momentum_signal
 ```
+
+## Recent Changes
+- **v4.8.2** (2026-05-13): Both `to_sql` calls (FE_MOMENTUM_SIGNALS to dbcp + cp_backtest) now use `method='multi', chunksize=200` -- ~10x faster writes.

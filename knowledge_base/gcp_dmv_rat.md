@@ -193,3 +193,6 @@ CREATE TABLE FE_RATIOS_SIGNALS (
     d_rat_pain_bin INTEGER            -- Gain to pain ratio signal (-1,0,1)
 );
 ```
+
+## Recent Changes
+- **v4.8.2** (2026-05-13): Both `to_sql` calls (FE_RATIOS_SIGNALS to dbcp + cp_backtest) now use `method='multi', chunksize=200` -- ~10x faster writes.

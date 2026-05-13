@@ -382,3 +382,6 @@ CREATE TABLE FE_METRICS_SIGNAL (
 8. **Performance Monitoring**: Runtime tracking and optimization
 9. **Time Series Processing**: Efficient grouped calculations for 1000+ cryptocurrencies
 10. **DMV Framework Integration**: Feeds Durability, Momentum, and Valuation signals
+
+## Recent Changes
+- **v4.8.2** (2026-05-13): All 4 `to_sql` calls (FE_METRICS + FE_METRICS_SIGNAL, dbcp + cp_backtest) now use `method='multi', chunksize=200` -- ~10x faster writes over a high-latency link to Cloud SQL postgres.
