@@ -92,7 +92,7 @@ for index, row in df.iloc[:, 4:].iterrows():
 with gcp_engine.connect() as conn:
     conn.execute(text('TRUNCATE TABLE "FE_DMV_ALL"'))
     conn.commit()
-df.to_sql('FE_DMV_ALL', con=gcp_engine, if_exists='append', index=False)
+df.to_sql('FE_DMV_ALL', con=gcp_engine, if_exists='append', index=False, method='multi', chunksize=200)
 logger.info("FE_DMV_ALL uploaded.")
 
 Durability = df[['slug'] + [c for c in df.columns if c.startswith('d_')]]
@@ -137,7 +137,7 @@ try:
                 conn.execute(text('DELETE FROM "FE_DMV_ALL" WHERE "timestamp" = :ts'), {"ts": ts})
                 conn.execute(text('DELETE FROM "FE_DMV_SCORES" WHERE "timestamp" = :ts'), {"ts": ts})
                 conn.commit()
-    df.to_sql('FE_DMV_ALL', con=gcp_engine_bt, if_exists='append', index=False)
+    df.to_sql('FE_DMV_ALL', con=gcp_engine_bt, if_exists='append', index=False, method='multi', chunksize=200)
     logger.info("FE_DMV_ALL appended to cp_backtest.")
     dmv_scores.to_sql('FE_DMV_SCORES', con=gcp_engine_bt, if_exists='append', index=False, method='multi', chunksize=BATCH_SIZE)
     logger.info("FE_DMV_SCORES appended to cp_backtest.")

@@ -6,6 +6,26 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.2] - 2026-05-13 UTC
+
+### Changed
+- **Batched INSERTs on every DMV pipeline write.** Added `method="multi", chunksize=200` to all `to_sql()` calls across the 10 production technical-analysis scripts:
+  - `gcp_dmv_met.py` (4 calls: FE_METRICS + FE_METRICS_SIGNAL to dbcp and cp_backtest)
+  - `gcp_dmv_tvv.py`, `gcp_dmv_mom.py`, `gcp_dmv_osc.py`, `gcp_dmv_pct.py`, `gcp_dmv_rat.py`, `gcp_dmv_candle.py`, `gcp_dmv_dow.py`, `gcp_dmv_levels.py` (2 calls each: dbcp + cp_backtest)
+  - `gcp_dmv_core.py` (2 calls: FE_DMV_ALL to dbcp + cp_backtest; FE_DMV_SCORES already had batching from an earlier change)
+
+### Rationale
+**Why:** Default `to_sql()` issues one INSERT per row. With 1000 rows over a high-latency link (Cloud Run / GitHub Actions / local Windows -> Cloud SQL postgres), each write to a signal table costs minutes in network round-trips. The 2026-05-13 manual `gcp_dmv_tvv.py` refill of `dbcp.FE_TVV_SIGNALS` was killed mid-INSERT after 20+ minutes; a second run with `method="multi", chunksize=200` finished the full pipeline (data fetch + indicator compute + 4 table writes including cp_backtest) in **3.64 minutes** -- ~4x end-to-end speedup, ~10x on the write step alone.
+
+**How to apply:** No migration. No DDL change. The pg8000 driver enforces a 16-bit BIND parameter cap (65535); with chunksize=200 the largest table (FE_DMV_ALL, 61 cols) packs 12,200 params per INSERT -- well under the cap. Smaller signal tables (10-12 cols) pack 2,000-2,400 per INSERT.
+
+### Impact Analysis
+- Risk: Low. Behavioral semantics unchanged -- still TRUNCATE+INSERT (or DELETE-by-timestamp+INSERT for cp_backtest); only the INSERT batching strategy changed. No row-count or column-value differences.
+- Expected daily DMV workflow runtime reduction: 5-10 minutes total.
+- Validated: `gcp_dmv_tvv.py` end-to-end against dbcp + cp_backtest on 2026-05-13, 3.64 min total runtime, both tables refilled with 1000 / 1,127,277 rows respectively. Other scripts share the identical write pattern -- same fix mechanism.
+- Parallel work in PR #33 (v4.8.1) fixes the unrelated NaN filter in `gcp_dmv_core.py:79`. Order-independent.
+- The `backups/` directory was intentionally not touched.
+
 ## [4.8.0] - 2026-05-11 UTC
 
 ### Added

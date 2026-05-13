@@ -219,7 +219,7 @@ from sqlalchemy import create_engine, text
 gcp_engine = create_engine(f'postgresql+pg8000://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}', pool_pre_ping=True)
 
 # Replace FE_METRICS in dbcp (drop+create to keep schema in sync)
-metrics.to_sql('FE_METRICS', con=gcp_engine, if_exists='replace', index=False)
+metrics.to_sql('FE_METRICS', con=gcp_engine, if_exists='replace', index=False, method='multi', chunksize=200)
 
 print("Metrics DataFrame uploaded to dbcp database successfully!")
 
@@ -232,7 +232,7 @@ if 'timestamp' in metrics.columns:
         with gcp_engine_bt.connect() as conn:
             conn.execute(text('DELETE FROM "FE_METRICS" WHERE "timestamp" = :ts'), {"ts": ts})
             conn.commit()
-metrics.to_sql('FE_METRICS', con=gcp_engine_bt, if_exists='append', index=False)
+metrics.to_sql('FE_METRICS', con=gcp_engine_bt, if_exists='append', index=False, method='multi', chunksize=200)
 
 print("Metrics DataFrame uploaded to cp_backtest database successfully!")
 
@@ -289,7 +289,7 @@ from sqlalchemy import create_engine
 with gcp_engine.connect() as conn:
     conn.execute(text('TRUNCATE TABLE "FE_METRICS_SIGNAL"'))
     conn.commit()
-metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine, if_exists='append', index=False)
+metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine, if_exists='append', index=False, method='multi', chunksize=200)
 
 print("FE_METRICS_SIGNAL DataFrame uploaded to dbcp database successfully!")
 
@@ -302,7 +302,7 @@ if 'timestamp' in metrics_signal.columns:
         with gcp_engine_bt.connect() as conn:
             conn.execute(text('DELETE FROM "FE_METRICS_SIGNAL" WHERE "timestamp" = :ts'), {"ts": ts})
             conn.commit()
-metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine_bt, if_exists='append', index=False)
+metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine_bt, if_exists='append', index=False, method='multi', chunksize=200)
 
 end_time = time.time()
 elapsed_time_seconds = end_time - start_time
