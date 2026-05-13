@@ -208,11 +208,53 @@ BIN_COLS = [
 ]
 
 
+def _insert_with_row_diagnostics(df, table_name, engine, db_label):
+    # Why: pg8000's "in failed transaction block" cascade hides the real PG
+    # error when a batched multi-INSERT poisons the transaction. On failure,
+    # fall back to per-row INSERT in isolated transactions so the offending
+    # row's actual error surfaces in the logs. Re-raise after diagnostics.
+    try:
+        df.to_sql(table_name, con=engine, if_exists="append",
+                  index=False, method="multi", chunksize=200)
+        return
+    except Exception as fast_err:
+        logger.error(
+            "Batched INSERT into %s (%s) failed; falling back to row-by-row "
+            "to surface real PG error. Masked error: %s: %s",
+            table_name, db_label, type(fast_err).__name__, fast_err,
+        )
+
+    n_rows = len(df)
+    failures = []
+    for i in range(n_rows):
+        row = df.iloc[i:i + 1]
+        try:
+            with engine.begin() as conn:
+                row.to_sql(table_name, con=conn, if_exists="append",
+                           index=False, method=None)
+        except Exception as row_err:
+            failures.append(i)
+            logger.error(
+                "Row %d/%d failed INSERT into %s (%s): %s: %s | row=%s",
+                i, n_rows, table_name, db_label,
+                type(row_err).__name__, row_err,
+                row.iloc[0].to_dict(),
+            )
+            if len(failures) >= 10:
+                logger.error("Stopping row diagnostics after 10 failures.")
+                break
+
+    raise RuntimeError(
+        f"INSERT into {table_name} ({db_label}) failed; "
+        f"{len(failures)} bad row(s) logged above (of {n_rows} total)."
+    )
+
+
 def push_to_db(df, table_name, engine):
     with engine.connect() as conn:
         conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
         conn.commit()
-    df.to_sql(table_name, con=engine, if_exists="append", index=False, method="multi", chunksize=200)
+    _insert_with_row_diagnostics(df, table_name, engine, "dbcp")
     logger.info(f"{table_name} (dbcp) uploaded.")
 
 
@@ -226,7 +268,7 @@ def push_to_db_backtest(df, table_name, engine):
                     {"ts": ts},
                 )
             conn.commit()
-    df.to_sql(table_name, con=engine, if_exists="append", index=False, method="multi", chunksize=200)
+    _insert_with_row_diagnostics(df, table_name, engine, "cp_backtest")
     logger.info(f"{table_name} (cp_backtest) appended.")
 
 

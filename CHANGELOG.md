@@ -6,6 +6,22 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.5] - 2026-05-13 UTC
+
+### Changed
+- **gcp_dmv_dow.py: added row-level fallback diagnostics to `push_to_db` and `push_to_db_backtest`.** Both functions now route through a new `_insert_with_row_diagnostics` helper that first attempts the fast batched INSERT (`method="multi", chunksize=200`), and on failure re-issues each row in an isolated transaction so pg8000's "in failed transaction block" cascade is broken. Each failing row is logged with its actual PG error and full row contents (up to 10 failures, then stops to avoid log spam). A `RuntimeError` is then raised so CI still fails loudly — but with a useful error.
+
+### Rationale
+**Why:** DMV run #457 on 2026-05-13 05:11 UTC failed in `gcp_dmv_dow.py`'s `to_sql` to `FE_DOW_PATTERNS` with the same useless "in failed transaction block" cascade we keep hitting (v4.8.1, v4.8.3, v4.8.4 all required probe scripts to surface the real error). Local probes against current data succeeded — the bug was data-transient and the failing row was already overwritten by the next OHLCV refresh, so the actual cause was unrecoverable from logs. A manual workflow_dispatch re-run (#459) completed `gcp_dmv_dow.py` successfully, confirming the v4.8.4 fix holds structurally; the failure was a one-off bad row from that morning's OHLCV refresh.
+
+**How to apply:** No DDL. Happy path is unchanged — when the batched INSERT succeeds, the helper returns immediately. The diagnostics path only runs on failure and only on the one DMV stage (dow) that has historically masked errors most often. If this proves valuable on the next recurrence, the same helper pattern can be lifted into `gcp_dmv_levels.py` and `gcp_dmv_candle.py` (and eventually the rest of the DMV scripts).
+
+### Impact Analysis
+- Risk: Very low. Happy path unchanged. Failure path is strictly more informative.
+- Performance: zero overhead on success. On failure, the fallback walks 1000 rows row-by-row (~30–60s estimated) before raising; previously the script aborted in <1s but yielded no useful diagnostic. Acceptable trade for the visibility.
+- Re-raise behaviour: failures still propagate, so CI status remains correct and the DMV workflow halts before downstream `gcp_dmv_levels.py` / `gcp_dmv_core.py` run on stale state.
+- Scope: dow only. Levels and candle use the same brittle pattern but did not fail on #457; deferred until needed.
+
 ## [4.8.4] - 2026-05-13 UTC
 
 ### Fixed
