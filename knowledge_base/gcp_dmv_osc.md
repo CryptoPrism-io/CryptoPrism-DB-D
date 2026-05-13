@@ -92,6 +92,29 @@ def calculate_trix(df, period=15):
 - **Signal**: Rate of change of triple-smoothed EMA
 - **Trend Identification**: Positive TRIX = uptrend, Negative = downtrend
 
+#### **7. Supertrend (v4.7.0)**
+```python
+def calculate_supertrend(df, atr_period=10, multiplier=3.0):
+    # hl2 = (high + low) / 2; basic upper = hl2 + multiplier * ATR(10)
+    # The "final" upper/lower bands carry forward across bars with a flip rule
+    # tied to close vs prior final band.
+```
+- **Components**: 10-period ATR; basic and final upper/lower bands; direction line
+- **Output columns**: `Supertrend_Line` (double precision), `Supertrend_Dir` (double precision)
+- **Bin signal**: `m_osc_supertrend_bin` in `FE_OSCILLATORS_SIGNALS` -- +1 when price closes above Supertrend line, -1 when below
+- **Per-slug stateful loop**: required because final bands depend on prior bar's final band and close
+
+#### **8. Aroon (v4.7.0)**
+```python
+def calculate_aroon(df, period=14):
+    # Aroon_Up   = 100 * (period - bars_since_highest_high) / period
+    # Aroon_Down = 100 * (period - bars_since_lowest_low) / period
+    # Aroon_Osc  = Aroon_Up - Aroon_Down
+```
+- **Output columns**: `Aroon_Up`, `Aroon_Down`, `Aroon_Osc` (all double precision)
+- **Range**: 0-100 each; oscillator -100 to +100
+- **Bin signal**: `m_osc_aroon_bin` in `FE_OSCILLATORS_SIGNALS` -- +1 when Aroon_Osc > 50, -1 when < -50, 0 otherwise (`np.select(default=0)`)
+
 ### **Binary Signal Generation**
 
 #### **Signal Logic Framework**
@@ -161,5 +184,12 @@ CREATE TABLE FE_OSCILLATORS_SIGNALS (
     m_osc_uo_bin INTEGER,              -- Ultimate Oscillator signal (-1,0,1)
     m_osc_ao_bin INTEGER,              -- Awesome Oscillator signal (-1,0,1)
     m_osc_trix_bin INTEGER             -- TRIX trend signal (-1,0,1)
+    , m_osc_supertrend_bin INTEGER     -- Supertrend signal (-1,0,1) -- v4.7.0
+    , m_osc_aroon_bin INTEGER          -- Aroon oscillator signal (-1,0,1) -- v4.7.0
 );
 ```
+
+## Recent Changes
+- **v4.8.2** (2026-05-13): Both `to_sql` calls (FE_OSCILLATORS_SIGNALS to dbcp + cp_backtest) now use `method='multi', chunksize=200` -- ~10x faster writes.
+- **v4.7.1** (2026-05-11): Bigint bins (`m_osc_supertrend_bin`, `m_osc_aroon_bin`) use `np.select(default=0)` so they default to 0 (neutral) rather than NULL. Matches the long-standing bigint-bin convention; aligns with `dmv_core.py`'s NaN-handling.
+- **v4.7.0** (2026-05-11): Added Supertrend (`Supertrend_Line/Dir` + `m_osc_supertrend_bin`) and Aroon (`Aroon_Up/Down/Osc` + `m_osc_aroon_bin`). See sections "7. Supertrend" and "8. Aroon" above.
