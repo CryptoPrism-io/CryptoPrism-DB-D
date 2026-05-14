@@ -110,7 +110,8 @@ def upload_to_db(df: pd.DataFrame, db_url: str, table: str):
     """
     engine = create_engine(db_url)
     with engine.begin() as conn:
-        df.to_sql(table, conn, if_exists="replace", index=False)
+        df.to_sql(table, conn, if_exists="replace", index=False,
+                  method="multi", chunksize=200)
     engine.dispose()
 
 

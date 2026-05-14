@@ -190,7 +190,8 @@ def push_to_db_backtest(df, table_name, engine):
         with engine.connect() as conn:
             conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
             conn.commit()
-        df.to_sql(table_name, con=engine, if_exists="append", index=False)
+        df.to_sql(table_name, con=engine, if_exists="append", index=False,
+                  method="multi", chunksize=200)
         logging.info(f"{table_name} rebuilt in backtest database (TRUNCATE+INSERT).")
     except Exception as e:
         logging.error(f"Error pushing data to {table_name}: {e}")

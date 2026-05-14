@@ -186,7 +186,8 @@ gcp_engine = create_engine(f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOS
 
 
 # Write the DataFrame to a new table in the database
-final_df.to_sql('FE_CC_INFO_URL', con=gcp_engine, if_exists='replace', index=False)
+final_df.to_sql('FE_CC_INFO_URL', con=gcp_engine, if_exists='replace', index=False,
+                method='multi', chunksize=200)
 
 
 gcp_engine.dispose()
