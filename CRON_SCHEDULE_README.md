@@ -68,7 +68,8 @@ graph TD
 - **File**: `.github/workflows/DMV.yml`
 - **Schedule**: `workflow_run: ["OHLCV"]` (Sequential after OHLCV)
 - **Estimated Time**: ~06:00-07:00 IST (05:30-06:30 UTC)
-- **Scripts Executed** (in order):
+- **Structure** (v4.9.0): two-job pipeline — `producers` (matrix, `max-parallel: 6`) → `core` (sequential, gated on producers success).
+- **Producer scripts (run in parallel, any order):**
   1. `gcp_postgres_sandbox/data_ingestion/gcp_fear_greed_cmc.py` - Market sentiment
   2. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_met.py` - Fundamental metrics
   3. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_tvv.py` - Volume/trend analysis (incl. Bollinger Bands from v4.7.0)
@@ -79,9 +80,11 @@ graph TD
   8. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_candle.py` - Candlestick patterns (9 directional) -- v4.8.0
   9. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_dow.py` - Dow Theory price-action (S/R, double/triple tops, breakouts, flag) -- v4.8.0
   10. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_levels.py` - Fibonacci levels + ATR bands -- v4.8.0
-  11. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_core.py` - **Final aggregation**
+- **Aggregation job (runs after all producers succeed):**
+  11. `gcp_postgres_sandbox/technical_analysis/gcp_dmv_core.py` - **Final signal aggregation**
 - **Purpose**: Complete technical analysis with 100+ indicators
-- **Duration**: ~45-60 minutes
+- **Duration**: ~10-12 minutes (wall-clock; previously ~37-45 min sequential pre-v4.9.0). Bounded by the slowest producer + core.
+- **Pip cache** (v4.9.0): `actions/setup-python@v4` with `cache: 'pip'` keeps install ~5s after the first run instead of ~30s per shard.
 
 ### 4. **QA_Telegram** - Quality Assurance
 - **File**: `.github/workflows/QA.yml`
@@ -239,4 +242,4 @@ QA_Telegram (Quality Assurance) [Manual]
 
 ---
 
-**Last updated**: 2026-05-11 (v4.8.0 — Candlestick patterns + Dow Theory + Fibonacci/ATR levels added. 3 new pipeline steps. No schedule timing changes.)
+**Last updated**: 2026-05-14 (v4.9.0 — DMV.yml restructured to two-job pipeline: 10 producers in parallel matrix (`max-parallel: 6`) → sequential core. Pip cache added. Wall-clock ~37min → ~10min. No schedule timing changes.)

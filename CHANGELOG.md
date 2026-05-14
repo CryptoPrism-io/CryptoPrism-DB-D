@@ -6,6 +6,27 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2026-05-14 UTC
+
+### Changed
+- **DMV.yml: restructured as two-job pipeline — `producers` (matrix, parallel) + `core` (sequential, gated).** The single 11-step sequential job is gone. All 10 producer scripts (fear-greed, met, tvv, pct, mom, osc, rat, candle, dow, levels) now run as a matrix with `max-parallel: 6` and `fail-fast: false`. `gcp_dmv_core.py` runs as a separate job with `needs: producers`, so it only executes after every producer succeeds.
+- **DMV.yml: pip caching enabled.** `actions/setup-python@v4` now uses `cache: 'pip'` in both jobs. Dependencies install in ~5s after the first run instead of ~30s per shard.
+- **DMV.yml: env block hoisted to job level.** Each job declares the shared `DB_*`, `CMC_API_KEY`, `GEMINI_API_KEY`, and `TELEGRAM_*` secrets once at the job level instead of repeating the same 11-line block under every `run` step (~100 lines removed).
+- **CRON_SCHEDULE_README.md: updated** section 3 (DMV) to document the new two-job structure and the ~10-12 min projected wall-clock duration (down from ~37-45 min).
+
+### Rationale
+**Why:** The DMV cron was 37:48 in run `25842071442`. After v4.8.6's fear-greed batched-INSERT fix, the projected sequential runtime was ~26 min — still dominated by serial execution of 10 producer scripts that are functionally independent (each reads from `1K_coins_ohlcv` and `crypto_listings_latest_1000` and writes to its own `FE_*` table; only `gcp_dmv_core.py` reads from the producers' outputs). The dependency graph supports a fan-out / fan-in shape, which the previous sequential YAML did not express.
+
+**How to apply:** Pure workflow-file change. No Python or SQL changes. No DDL. Behaviour is identical from the DB's perspective — same scripts, same order of writes per producer, same downstream `core` aggregation. Only the orchestration changes.
+
+### Impact Analysis
+- Risk: Medium. First production cron after merge is the first time all 10 producers run concurrently. Concurrency capped at 6 to keep DB connection pressure bounded (each producer opens 2-3 connections across `dbcp` + `cp_backtest` ≈ 12-18 concurrent peak). Managed Postgres on GCP should handle this comfortably; will monitor.
+- `fail-fast: false`: if one producer fails, the other shards still complete. `core` is skipped, surfacing every failed shard's logs instead of just the first. Trade: a flaky producer no longer aborts the run early, so we still pay for the other shards' compute time.
+- Wall-clock projection: bounded by `max(slowest producer)` + core. Current slowest = metrics @ 8:39 → ~10 min total. After a future metrics optimization, slowest = volatility @ 3:25 → ~5 min total.
+- GitHub Actions compute: ~10 shards × ~3 min each + ~1 core min ≈ 31 min compute (vs previous ~37 min wall-clock = 37 min compute). Comparable or slightly less billable compute, but wall-clock collapses ~3.7x.
+- Pip cache: first run after a `requirements.txt` change misses the cache and pays the normal ~30s. Every subsequent run hits and installs in ~5s.
+- Re-run UX: `gh run rerun --failed` now re-runs only the failed producer shard(s) + core, not the whole pipeline. Much faster recovery for transient producer failures.
+
 ## [4.8.7] - 2026-05-14 UTC
 
 ### Changed
