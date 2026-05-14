@@ -6,6 +6,28 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.6] - 2026-05-14 UTC
+
+### Changed
+- **gcp_fear_greed_cmc.py: incremental fetch + batched INSERT.** Three changes:
+  1. Added `get_latest_timestamp_in_db()` to read `MAX("timestamp")` from `FE_FEAR_GREED_CMC` and a new `fetch_incremental()` that pulls only records newer than that cutoff (CMC paginates newest-first; stop when a page contains any record at-or-older than cutoff). Falls back to `fetch_all_data()` full backfill when the table is empty/missing.
+  2. Replaced `TRUNCATE TABLE` + unbatched `df.to_sql` with the v4.8.2 pattern: `DELETE FROM ... WHERE "timestamp" = :ts` per affected timestamp, then `to_sql(method="multi", chunksize=200)`.
+  3. Skips insert entirely when the incremental fetch returns zero rows ("already up to date").
+
+### Rationale
+**Why:** The DMV pipeline's first step (`fetch fear and greed.py`) was taking **12:02** in run #25842071442 — 32% of the entire 37:48 cron. Two bugs combined: `fetch_all_data()` paginated CMC's `/v3/fear-and-greed/historical` all the way back to Feb 2018 every single run (~2900 unchanging historical rows re-fetched daily), and `df.to_sql(...)` had no `method='multi'`/`chunksize`, so it issued ~2900 single-row INSERTs at ~150ms RTT each ≈ 7+ minutes purely on inserts. v4.8.2 batched every other DMV script's `to_sql` but missed this one because it lives under `data_ingestion/`, not `technical_analysis/`.
+
+**How to apply:** Pure code change. No DDL. No env vars. The new incremental path is gated on `MAX("timestamp")` existing in the table — first run after a full table drop still works (falls back to full backfill with the now-batched INSERT).
+
+### Impact Analysis
+- Risk: Low. Reuses the DELETE-by-timestamp + batched-INSERT pattern from `gcp_dmv_met.py` (production since v4.8.2). The novel piece is `fetch_incremental()`, which was validated locally against current DB state.
+- Validated locally (2026-05-14):
+  - Steady-state ("already up to date" path): 11.2 seconds end-to-end vs prior 12:02 (~65x speedup).
+  - Insert path probe: artificially set cutoff to pull 2 newest rows, ran full DELETE+INSERT, verified row count 1050 → 1050 (idempotent re-upsert).
+- Performance projection for daily cron: ~10-15s once steady-state (vs 12 min today). Removes ~11.5 minutes from total DMV runtime.
+- Bandwidth: avoids re-downloading ~2900 historical rows from CMC every run.
+- Quota: reduces CMC API calls from 6 per run to 1 (steady state).
+
 ## [4.8.5] - 2026-05-13 UTC
 
 ### Changed

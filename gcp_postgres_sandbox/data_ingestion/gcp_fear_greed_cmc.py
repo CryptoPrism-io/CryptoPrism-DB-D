@@ -89,6 +89,50 @@ def fetch_all_data(api_key):
     return all_data
 
 
+def fetch_incremental(api_key, latest_ts_in_db, page_size=100):
+    """Fetch only records newer than latest_ts_in_db. CMC paginates newest-first,
+    so we stop as soon as a page contains any record at-or-older than the cutoff.
+    """
+    all_data = []
+    start = 1
+    while True:
+        data = fetch_fear_and_greed_data(api_key, page_size, start)
+        if not data or "data" not in data or not data["data"]:
+            break
+        page = data["data"]
+        new_records = [
+            r for r in page
+            if pd.to_datetime(int(r["timestamp"]), unit="s") > latest_ts_in_db
+        ]
+        all_data.extend(new_records)
+        if len(new_records) < len(page):
+            break  # caught up — page contains records we already have
+        start += page_size
+    logger.info(
+        f"Fetched {len(all_data)} new Fear & Greed records since {latest_ts_in_db}."
+    )
+    return all_data
+
+
+def get_latest_timestamp_in_db(table_name="FE_FEAR_GREED_CMC"):
+    """Return max(timestamp) in the table, or None if table is empty or missing."""
+    engine = create_db_engine()
+    try:
+        with engine.connect() as conn:
+            ts = conn.execute(
+                text(f'SELECT MAX("timestamp") FROM "{table_name}"')
+            ).scalar()
+        if ts is None:
+            return None
+        ts = pd.Timestamp(ts)
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts
+    except Exception as e:
+        logger.warning(f"Could not read max timestamp from {table_name}: {e}")
+        return None
+
+
 def process_fear_greed_data(data):
     """ Converts JSON data into a Pandas DataFrame. """
     if data:
@@ -101,21 +145,42 @@ def process_fear_greed_data(data):
 
 
 def push_data_to_db(df, table_name="FE_FEAR_GREED_CMC"):
-    """Pushes the Fear & Greed data to the database using TRUNCATE + INSERT.
-    Avoids DROP TABLE which would break dependent materialized views.
+    """Incremental upsert: DELETE rows for the timestamps we are about to write,
+    then batched INSERT. Avoids re-uploading 8 years of unchanging history every
+    run and avoids the 1-row-per-RTT cost of the prior unbatched to_sql.
     """
+    if df.empty:
+        logger.info("No new rows to push; skipping insert.")
+        return
     engine = create_db_engine()
+    timestamps = df["timestamp"].dropna().unique().tolist()
     with engine.connect() as conn:
-        conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
+        for ts in timestamps:
+            conn.execute(
+                text(f'DELETE FROM "{table_name}" WHERE "timestamp" = :ts'),
+                {"ts": ts},
+            )
         conn.commit()
-    df.to_sql(table_name, con=engine, if_exists="append", index=False)
-    logger.info(f"Data successfully pushed to {table_name}")
+    df.to_sql(
+        table_name, con=engine, if_exists="append", index=False,
+        method="multi", chunksize=200,
+    )
+    logger.info(f"Pushed {len(df)} row(s) to {table_name}.")
 
 
 if __name__ == "__main__":
     api_key = API_KEY
-    full_year_data = fetch_all_data(api_key)
-    df = process_fear_greed_data(full_year_data)
 
+    latest_ts = get_latest_timestamp_in_db()
+    if latest_ts is None:
+        logger.info("Empty/missing FE_FEAR_GREED_CMC: running full backfill.")
+        records = fetch_all_data(api_key)
+    else:
+        logger.info(f"Incremental fetch since {latest_ts}.")
+        records = fetch_incremental(api_key, latest_ts)
+
+    df = process_fear_greed_data(records)
     if not df.empty:
         push_data_to_db(df)
+    else:
+        logger.info("Already up to date — nothing to insert.")
