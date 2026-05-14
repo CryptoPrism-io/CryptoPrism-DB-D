@@ -6,6 +6,24 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.8.7] - 2026-05-14 UTC
+
+### Changed
+- **Audit: added `method='multi', chunksize=200` to remaining unbatched `to_sql` calls** found by a repo-wide grep after v4.8.6:
+  - `gcp_postgres_sandbox/data_ingestion/cmc_listings.py:113` (LISTINGS workflow, daily).
+  - `gcp_postgres_sandbox/data_ingestion/gcp_cc_info.py:189` (LISTINGS workflow, daily).
+  - `gcp_postgres_sandbox/backtesting/gcp_dmv_mom_backtest.py:193` (manual backtest workflow).
+
+### Rationale
+**Why:** v4.8.6 surfaced that `gcp_fear_greed_cmc.py` had been missing the batched-INSERT pattern that v4.8.2 added to every script under `technical_analysis/`. A full `to_sql` audit found three more — all outside `technical_analysis/` (two in `data_ingestion/`, one in `backtesting/`), confirming the v4.8.2 sweep was scoped by directory and missed peer dirs. None affect the DMV cron timing directly, but `cmc_listings.py` and `gcp_cc_info.py` run as the LISTINGS daily prereq for OHLCV → DMV, so faster LISTINGS = earlier start for downstream stages.
+
+**How to apply:** Three one-line edits. Identical pattern across all three. No DDL.
+
+### Impact Analysis
+- Risk: Very low. `method='multi'` + `chunksize=200` is the same pattern in production across all DMV scripts since v4.8.2 and now `gcp_fear_greed_cmc.py` since v4.8.6.
+- Performance: ~1000 rows per insert previously at ~150ms RTT each ≈ 2-3 min per call. After batching: ~5 batches of 200 = ~1 sec. Estimated savings: ~5-8 min wall-clock per day across the LISTINGS workflow (two calls).
+- Scope: confirmed via repo-wide grep that all remaining single-line `to_sql` calls under `gcp_postgres_sandbox/` and `scripts/` either already have `method='multi'` (on a continuation line — verified per-file) or are intentional single-row diagnostic inserts (e.g. `gcp_dmv_dow.py:233` row-by-row fallback).
+
 ## [4.8.6] - 2026-05-14 UTC
 
 ### Changed
