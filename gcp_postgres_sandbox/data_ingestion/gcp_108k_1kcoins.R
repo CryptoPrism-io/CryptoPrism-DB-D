@@ -47,24 +47,29 @@ if (length(missing_vars) > 0) {
 
 print(paste("✅ Database Configuration Loaded: DB_HOST =", CONFIG$db_host, "DB_PORT =", CONFIG$db_port))
 
-# Establish database connections
-con <- dbConnect(
-  RPostgres::Postgres(),
-  host = CONFIG$db_host,
-  dbname = CONFIG$db_name,
-  user = CONFIG$db_user,
-  password = CONFIG$db_password,
-  port = CONFIG$db_port
-)
+# Helper: open a fresh DB connection.
+# sslmode=require is mandatory for AWS RDS; keepalives stop the connection from
+# being reaped during the multi-minute CMC history fetch (the cause of the
+# "SSL error: unexpected eof while reading" failures on writes after migration).
+connect_db <- function(dbname) {
+  dbConnect(
+    RPostgres::Postgres(),
+    host = CONFIG$db_host,
+    dbname = dbname,
+    user = CONFIG$db_user,
+    password = CONFIG$db_password,
+    port = CONFIG$db_port,
+    sslmode = "require",
+    keepalives = 1,
+    keepalives_idle = 30,
+    keepalives_interval = 10,
+    keepalives_count = 5
+  )
+}
 
-con_bt <- dbConnect(
-  RPostgres::Postgres(),
-  host = CONFIG$db_host,
-  dbname = CONFIG$db_name_bt,
-  user = CONFIG$db_user,
-  password = CONFIG$db_password,
-  port = CONFIG$db_port
-)
+# Establish database connections
+con <- connect_db(CONFIG$db_name)
+con_bt <- connect_db(CONFIG$db_name_bt)
 
 # Check if the connection is valid
 if (dbIsValid(con)) {
@@ -108,7 +113,9 @@ all_coins <- crypto_history(
   coin_list = crypto.listings.latest,
   convert = "USD",
   limit = 2000,
-  start_date = Sys.Date()-1,
+  # OHLCV_START_DATE lets us run a one-time historical backfill (e.g. fill a gap
+  # after migration) without code changes. Defaults to yesterday for daily runs.
+  start_date = as.Date(Sys.getenv("OHLCV_START_DATE", as.character(Sys.Date()-1))),
   end_date = Sys.Date()+1,
   sleep = 0
 )
@@ -135,6 +142,15 @@ crypto_global_quote <- crypto_global_quotes(
 
 # Write dataframes to database
 print("Writing data to database...")
+
+# The CMC history fetch above can run for several minutes; AWS RDS may have
+# reaped the idle connections opened before the fetch. Reconnect fresh before
+# any writes to avoid "SSL error: unexpected eof while reading".
+print("Reconnecting to database after fetch (avoid stale/idle connection)...")
+try(dbDisconnect(con), silent = TRUE)
+try(dbDisconnect(con_bt), silent = TRUE)
+con <- connect_db(CONFIG$db_name)
+con_bt <- connect_db(CONFIG$db_name_bt)
 
 # Write global quotes
 dbWriteTable(con, "crypto_global_latest", crypto_global_quote, overwrite = TRUE, row.names = FALSE)
