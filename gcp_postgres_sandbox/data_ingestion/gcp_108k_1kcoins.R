@@ -109,13 +109,23 @@ if (length(missing_cols) > 0) {
 
 # Get historical data using the database listings
 print("Fetching historical OHLCV data...")
+
+# OHLCV_START_DATE lets us run a one-time historical backfill (e.g. fill a gap
+# after migration) without code changes. Defaults to yesterday for daily runs.
+# NOTE: the workflow ALWAYS sets this env var -- to "" on workflow_run/scheduled
+# triggers, since there is no dispatch input. Sys.getenv()'s default only kicks
+# in when a var is UNSET, not when it is set to "", so we must handle the empty
+# string explicitly. Otherwise as.Date("") -> NA and crypto2's convert_date()
+# fails with "missing value where TRUE/FALSE needed".
+ohlcv_start_env <- Sys.getenv("OHLCV_START_DATE")
+ohlcv_start_date <- if (nzchar(ohlcv_start_env)) as.Date(ohlcv_start_env) else Sys.Date() - 1
+print(paste("Using OHLCV start_date =", ohlcv_start_date))
+
 all_coins <- crypto_history(
   coin_list = crypto.listings.latest,
   convert = "USD",
   limit = 2000,
-  # OHLCV_START_DATE lets us run a one-time historical backfill (e.g. fill a gap
-  # after migration) without code changes. Defaults to yesterday for daily runs.
-  start_date = as.Date(Sys.getenv("OHLCV_START_DATE", as.character(Sys.Date()-1))),
+  start_date = ohlcv_start_date,
   end_date = Sys.Date()+1,
   sleep = 0
 )
