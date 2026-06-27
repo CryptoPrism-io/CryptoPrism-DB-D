@@ -1,0 +1,43 @@
+name: HEALTHCHECK
+
+# Hourly AWS / RDS pipeline health check.
+# Goes RED within the hour if an AWS-side change (security group, rotated
+# password, changed endpoint) breaks the DB-D pipeline's access to RDS, or if
+# the daily tables stop updating. This is the early-warning the old env_test
+# never gave (it passed even when the DB was unreachable).
+
+on:
+  schedule:
+    - cron: '15 * * * *'   # every hour at :15 (avoids the 00:30 LISTINGS run)
+  workflow_dispatch: {}
+
+jobs:
+  healthcheck:
+    # IMPORTANT: keep this runner in sync with the DB-D data workflows
+    # (LISTINGS / OHLCV / DMV). It must test the SAME path the pipeline uses.
+    # While those run on GitHub-hosted runners, this stays on ubuntu-latest.
+    # When they move to the self-hosted runner, change this to:
+    #     runs-on: [self-hosted, dbcp]
+    runs-on: ubuntu-latest
+    environment: testsecrets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Run AWS pipeline health check
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_SSLMODE: require
+          HEALTHCHECK_MAX_AGE_DAYS: '2'
+        run: python aws_pipeline_healthcheck.py
