@@ -119,6 +119,10 @@ interval rule first_seen ≤ d ≤ last_seen, sparse-gap limitation documented, 
 - Historical metrics reconstruction (per-date ATH/ATL is now available in the layer; the FE_METRICS history gap requires a regenerate-from-OHLCV pass).
 - Backfill start date (early years ~5–30 surviving slugs) and whether the 4-core set is sufficient.
 
-## 8. Commit
+## 8. Commit + PR
 
-See `git log` (this branch). **Not pushed; no PR; no merge.**
+- Local commit: `ce347cc`, then PR-gate commit `63f29af` on `feat/cp011-dmv-pit-recon` (base `927be95`).
+- PR: **https://github.com/CryptoPrism-io/CryptoPrism-DB-D/pull/44** (repo renamed from `CryptoPrism-DB` → `CryptoPrism-DB-D`; base `main`, head SHA `63f29af`).
+- Checks: **GitGuardian pass** · **claude-review fail** (repo's `anthropics/claude-code-action` produced no review/comment — infra/token issue, not a code finding; documented separately).
+- Pre-existing repo test limitations (documented separately): `test_backtest_mom_data.py` cannot run without prod DB creds (SystemExit at import); `test_phase1_supertrend.py` collects 0 tests.
+- **Not merged.** No rebuild, backtest, deploy, or production write.
