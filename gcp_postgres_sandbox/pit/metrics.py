@@ -27,9 +27,11 @@ def calculate_metrics_pit(
 
     Adds: v_met_ath, v_met_atl, ath_date_pit, atl_date_pit,
           d_met_ath_days, d_met_atl_days, d_met_ath_week, d_met_ath_month,
-          d_met_atl_week, d_met_atl_month.
+          d_met_atl_week, d_met_atl_month, d_met_coin_age_d (row-date minus the
+          asset's first valid OHLCV date — PIT approximate listing age).
     """
     df = df.sort_values([slug_col, date_col]).copy()
+    first_seen = df.groupby(slug_col)[date_col].transform("min")
     out_parts: list[pd.DataFrame] = []
     for _slug, g in df.groupby(slug_col, sort=True):
         highs = g[high_col].to_numpy(dtype=float)
@@ -61,6 +63,7 @@ def calculate_metrics_pit(
             )
         g = g.copy()
         g[date_col] = pd.to_datetime(g[date_col]).dt.tz_localize(None)
+        g["first_seen"] = pd.to_datetime(first_seen.loc[g.index]).dt.tz_localize(None)
         g["v_met_ath"] = ath
         g["v_met_atl"] = atl
         g["ath_date_pit"] = pd.to_datetime(ath_date)
@@ -71,6 +74,7 @@ def calculate_metrics_pit(
         g["d_met_ath_month"] = g["d_met_ath_days"] // 30
         g["d_met_atl_week"] = g["d_met_atl_days"] // 7
         g["d_met_atl_month"] = g["d_met_atl_days"] // 30
+        g["d_met_coin_age_d"] = (g[date_col] - g["first_seen"]).dt.days
         out_parts.append(g)
 
     return pd.concat(out_parts) if out_parts else df.copy()

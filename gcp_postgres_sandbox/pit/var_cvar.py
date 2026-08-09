@@ -9,7 +9,9 @@ Contract:
   - d_pct_cvar  = mean of trailing window returns <= d_pct_var.
   - Returns NULL (NaN) when fewer than ``min_obs`` valid returns are available
     (insufficient history) — never zero/neutral-filled.
-  - Deterministic: numpy default linear interpolation quantile.
+  - Deterministic: explicit quantile interpolation = ``linear`` (numpy default);
+    input is stably sorted by (slug, date); duplicate dates are all included in
+    the same trailing window (searchsorted left boundary includes equal dates).
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ def calculate_var_cvar_pit(
             win = win[~np.isnan(win)]
             if win.size < min_obs:
                 continue
-            v = float(np.quantile(win, 1.0 - confidence))
+            v = float(np.quantile(win, 1.0 - confidence, method="linear"))
             var[i] = v
             tail = win[win <= v]
             if tail.size:

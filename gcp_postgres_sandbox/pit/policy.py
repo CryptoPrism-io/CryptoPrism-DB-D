@@ -59,6 +59,29 @@ CORE_FAMILIES: list[str] = ["oscillators", "momentum", "tvv", "ratios"]
 # Optional families (partial/no history today; measured for coverage impact).
 OPTIONAL_FAMILIES: list[str] = ["metrics"]
 
+# Measured coverage (read-only cp_backtest, distinct slug,date intersections):
+#   per-family      ~1.19M each; metrics only 96,811 (113 dates -> history bottleneck)
+#   all-8          94,714   (-92%)  -> too destructive: do NOT require all eight
+#   core-4         1,177,746 (98.8%) -> least destructive defensible rule (CHOSEN)
+#   core-4+metrics 95,713  (-92%)  -> metrics optional until history is reconstructed
+COVERAGE_MEASURED = {
+    "as_of": "2026-08-08",
+    "per_family_distinct_slug_date": {
+        "oscillators": 1187577, "momentum": 1187473, "metrics": 96811,
+        "tvv": 1187577, "ratios": 1194961, "candlestick": 1186577,
+        "dow": 1187577, "price_levels": 1187577,
+    },
+    "intersection_distinct_slug_date": {
+        "all_8": 94714, "core_4": 1177746, "core_4_plus_metrics": 95713,
+    },
+    "decision": (
+        "Required core = oscillators, momentum, tvv, ratios (intersection 1,177,746 = "
+        "98.8% of the ~1.19M signal universe). All-8 and core+metrics collapse to ~95k "
+        "because FE_METRICS_SIGNAL only has ~113 historical dates; do not require all "
+        "eight until metrics history is reconstructed."
+    ),
+}
+
 
 def core_bin_columns() -> list[str]:
     cols: list[str] = []

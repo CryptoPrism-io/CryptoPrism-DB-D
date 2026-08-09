@@ -202,6 +202,17 @@ async def main() -> None:
         "date": str(rep.date()),
         "pit_days_since_ath": int(btc_pm["d_met_ath_days"]),
         "old_days_since_ath(now-based)": int(btc_om["d_met_ath_days_old"]),
+        "pit_ath_date": str(btc_pm["ath_date_pit"].date()),
+        "pit_days_since_atl": int(btc_pm["d_met_atl_days"]),
+        "old_days_since_atl(now-based)": int(btc_om["d_met_atl_days_old"]),
+        "pit_coin_age_days": int(btc_pm["d_met_coin_age_d"]),
+    }
+
+    # completeness comparison: corrected marks incomplete rows (NaN), old zero-filled
+    comp_cmp = {
+        "corrected_incomplete_rows": int(scored["incomplete"].sum()),
+        "corrected_incomplete_rate": round(float(scored["incomplete"].mean()), 4),
+        "old_behavior": "silent fillna(0) -> no incompleteness recorded",
     }
 
     # coverage under alternative core-signal rules
@@ -243,6 +254,15 @@ async def main() -> None:
         "signal_present": present,
         "var_cvar_comparison": var_cmp,
         "metrics_comparison": met_cmp,
+        "completeness_comparison": comp_cmp,
+        "coverage_impact": {
+            "policy": "required-core intersection (oscillators, momentum, tvv, ratios)",
+            "full_history_all_8_distinct_slug_date": 94714,
+            "full_history_core_4_distinct_slug_date": 1177746,
+            "full_history_core_4_plus_metrics": 95713,
+            "note": "all-8 and core+metrics collapse to ~95k because FE_METRICS_SIGNAL "
+                    "has only ~113 historical dates; core-4 keeps 98.8%.",
+        },
         "score_range": {
             "min": {c: (float(scored[c].min()) if scored[c].notna().any() else None) for c in
                     ("Durability_Score", "Momentum_Score", "Valuation_Score")},
@@ -303,6 +323,16 @@ def estimate_full_rebuild(
         },
         "cost_estimate_usd": "≈ $0-0.05: local/EC2 script over existing RDS; no Athena, no "
                              "external data, no new infra; dominant cost is wall-clock",
+        "athena_scan_volume": "0 GB — rebuild reads RDS OHLCV only; no Athena (canonical "
+                              "UTXO/Athena tables untouched)",
+        "rds_write_volume": "≈ 2.0-3.5M rows written across shadow FE_*_SIGNALS + "
+                            "FE_DMV_ALL/SCORES (~500MB-1GB); to a shadow schema, not canonical",
+        "rollback_method": (
+            "Shadow rebuild targets versioned shadow tables (e.g. pit_dmv_YYYYMMDD.* / a "
+            "shadow schema). Rollback = DROP the shadow schema; canonical FE_* history is "
+            "never touched, so it is fully reversible with zero impact on production."
+        ),
+        "target": "versioned shadow tables; canonical DMV history never overwritten",
         "note": "Numbers from read-only cp_backtest; no production tables written.",
     }
 

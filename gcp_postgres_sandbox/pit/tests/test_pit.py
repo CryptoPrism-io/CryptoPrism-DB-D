@@ -217,6 +217,25 @@ def test_determinism_same_input_same_output():
     pd.testing.assert_frame_equal(m1, m2)
 
 
+def test_coin_age_pit_row_date_minus_first_seen():
+    df = make_ohlcv(n_days=400)
+    m = calculate_metrics_pit(df)
+    btc = m[m["slug"] == "bitcoin"].sort_values("timestamp")
+    first = btc["timestamp"].iloc[0]
+    assert btc["d_met_coin_age_d"].iloc[0] == 0
+    assert btc["d_met_coin_age_d"].iloc[100] == (btc["timestamp"].iloc[100] - first).days
+    assert btc["d_met_coin_age_d"].gt(0).any()  # grows over time, no now()/negative
+
+
+def test_duplicate_dates_deterministic_and_in_window():
+    df = make_returns(make_ohlcv(n_days=400))
+    dup = pd.concat([df, df.iloc[5:8]], ignore_index=True)  # duplicate 3 rows
+    res = calculate_var_cvar_pit(dup)
+    res2 = calculate_var_cvar_pit(dup)
+    pd.testing.assert_frame_equal(res, res2)
+    assert len(res) == len(dup)
+
+
 # ── 8. future-row mutation test ─────────────────────────────────────────
 def test_future_row_mutation_does_not_change_output_at_d():
     """Changing any input after date d must not alter DMV output at d."""
