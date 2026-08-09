@@ -37,7 +37,7 @@ distinct `(slug, date)` intersections from cp_backtest:
 ~95k. **The least destructive defensible rule is the 4-core intersection** — recorded in
 `policy.COVERAGE_MEASURED` and used by both live and backfill.
 
-## 3. Tests — 13/13 pass (ruff + mypy clean)
+## 3. Tests — 16/16 pass (ruff + mypy clean)
 
 - `test_var_cvar_pit` — property: d_pct_var == trailing-window 5th percentile over rows ≤ t (linear interpolation).
 - `test_var_cvar_pit_null_before_min_history` — NULL before 252 obs.
@@ -65,21 +65,44 @@ distinct `(slug, date)` intersections from cp_backtest:
 | Completeness | corrected marks **2,337 incomplete (31.2%)** as NaN; old silently `fillna(0)` (no incompleteness recorded) |
 | Core-signal coverage | 4/4 families: **5,144 rows (68.8%)** · 3/4: 1,286 · 1/4: 36 · incomplete marked, not zero-filled |
 
-## 5. Full shadow rebuild estimate (from real cp_backtest counts, read-only)
+## 5. Count reconciliation + full shadow rebuild estimate (read-only cp_backtest)
 
+**Exact reconciliation (all measured, read-only):**
+
+| Step | Distinct (slug,date) rows | Note |
+|---|---|---|
+| PIT_APPROX universe (`1K_coins_ohlcv`) | **2,590,975** | eligibility universe incl. 1,257 delisted slugs |
+| Core-4 presence intersection (in all 4 core tables) | **1,177,746** | 45.5% of universe (survivorship-filtered old tables + early sparsity) |
+| Incomplete core rows | **4,095 (0.35%)** | present but ≥1 required bin NULL (warmup) |
+| **Core-4 complete (valid scored)** | **1,173,651** | all required bins non-null in all 4 families |
+| Old canonical `FE_DMV_ALL` rows | 99,203 | bitcoin-only pre-2026 (metrics bottleneck) |
+
+**Shadow rebuild estimate (corrected):**
 | Item | Value |
 |---|---|
-| PIT-universe rows (distinct slug,date in `1K_coins_ohlcv`) | **2,590,975** |
-| Raw OHLCV rows | 2,600,882 |
-| Momentum signal rows (history) | 1,187,473 |
-| Ratios signal rows (history) | 1,194,961 |
-| Sample all-4-core rate | 0.688 |
-| **Estimated 4-core DMV rows** | **≈ 817,000** (momentum_rows × all4_rate) |
+| Estimated scored shadow rows | **≈ 1,173,651 (measured core-4 complete)**; expected range **[1.17M .. 2.59M]** (PIT rebuild may add delisted slugs' rows) |
+| Universe upper bound | 2,590,975 |
+| Correction vs earlier ~817k | The 817k was an underestimate: it multiplied `momentum_rows` (1,187,473) by the **sample** all-4-core rate (0.688), which is inflated by the delisted asset (no rows in the old listings-joined signal tables → 31.2% sample incompleteness). The full-history core-4 intersection is 99.65% complete. Correct base = core-4 complete = **1,173,651**. |
 | Runtime | PIT layer ≈ 10–15 min for ~2.6M rows; full rebuild incl. signal regeneration ≈ 1–3 h (ratios 28d trailing loop dominates) |
 | Athena scan | **0 GB** — rebuild reads RDS OHLCV only; canonical Athena/UTXO tables untouched |
-| RDS write volume | ≈ 2.0–3.5M rows across shadow `FE_*_SIGNALS` + `FE_DMV_ALL/SCORES` (~0.5–1 GB), to a **shadow schema** |
+| RDS write volume | ≈ 1.2–3.5M rows across shadow `FE_*_SIGNALS` + `FE_DMV_ALL/SCORES` (~0.5–1 GB), to a **shadow schema** |
 | AWS cost | **≈ $0–0.05** (local/EC2 over existing RDS; no Athena; no external data; no new infra) |
-| Rollback | DROP the versioned shadow schema (`pit_dmv_<date>.*`); canonical `FE_*` history never overwritten → fully reversible, zero production impact |
+| Rollback | DROP the versioned shadow schema (`pit_dmv_<version>.*`); canonical `FE_*` history never overwritten → fully reversible |
+
+**Optional metrics cannot remove core rows:** core scoring is independent of metrics;
+metrics is never required for a core row to be scored. Requiring metrics would collapse
+the intersection to 95,713 (−92%, measured), so it stays optional and core rows are
+unaffected by its presence/absence.
+
+**Shadow-target guard:** `pit/targets.py` `assert_shadow_schema()` rejects canonical names
+(`public`, `FE_DMV_ALL`, `FE_DMV_SCORES`, `dbcp`, `cp_backtest`, …) and any schema not
+prefixed `pit_dmv_`; `shadow_schema(version)` yields a unique versioned name. No config
+default resolves to canonical `FE_*` (the pit layer writes nothing; the sample is read-only).
+
+**PIT_APPROX exact label (`policy.UNIVERSE_META`):** `universe_method=PIT_APPROX`,
+"OHLCV-observed eligibility universe" — source `1K_coins_ohlcv` (2013-04-28..2026-08-08),
+interval rule first_seen ≤ d ≤ last_seen, sparse-gap limitation documented, upgrade path
+`CMC_SNAPSHOT`, **no historical rank or market-cap eligibility claim**.
 
 ## 6. Methodology breaks fixed vs Phase A
 

@@ -26,6 +26,29 @@ MISSING_DATA_POLICY = (
     "scores (marked incomplete); missing VaR/CVaR stays NULL; nothing is zero-filled."
 )
 
+# PIT_APPROX universe metadata — exact label and limitations.
+# It is an OHLCV-OBSERVED ELIGIBILITY universe, NOT a reconstructed historical CMC
+# top-1000 universe, and must never be presented as one (no historical rank or
+# market-cap eligibility claim).
+UNIVERSE_META = {
+    "universe_method": "PIT_APPROX",
+    "description": (
+        "OHLCV-observed eligibility universe. NOT a reconstructed historical CMC "
+        "top-1000 universe; makes NO historical rank or market-cap eligibility claim."
+    ),
+    "source_table": "1K_coins_ohlcv (cp_backtest)",
+    "date_coverage": "2013-04-28 .. 2026-08-08",
+    "interval_rule": (
+        "asset eligible on date d iff first_seen(ohlcv) <= d <= last_seen(ohlcv)"
+    ),
+    "sparse_gap_limitation": (
+        "interval membership may include dates where the asset has no OHLCV row "
+        "(sparse gaps); it does not assert the asset was listed/ranked on those dates"
+    ),
+    "upgrade_path": "CMC_SNAPSHOT (dated CMC listing snapshots) when ingested",
+    "no_historical_rank_or_mcap_claim": True,
+}
+
 # Declared signal families (columns are the approved bin columns, from the
 # backfill signal definitions). Values are -1/0/1 bins.
 SIGNAL_FAMILIES: dict[str, list[str]] = {

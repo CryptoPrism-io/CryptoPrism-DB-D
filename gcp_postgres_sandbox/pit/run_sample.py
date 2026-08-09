@@ -38,6 +38,45 @@ WINDOW = ("2023-01-01", "2026-08-08")
 OUT = Path(__file__).resolve().parent.parent.parent / "report"
 T0 = time.time()
 
+_CORE_TABLES = {
+    "FE_OSCILLATORS_SIGNALS": [
+        "m_osc_macd_crossover_bin", "m_osc_cci_bin", "m_osc_adx_bin",
+        "m_osc_uo_bin", "m_osc_ao_bin", "m_osc_trix_bin",
+    ],
+    "FE_MOMENTUM_SIGNALS": [
+        "m_mom_roc_bin", "m_mom_williams_%_bin", "m_mom_smi_bin",
+        "m_mom_cmo_bin", "m_mom_mom_bin",
+    ],
+    "FE_TVV_SIGNALS": [
+        "m_tvv_obv_1d_binary", "d_tvv_sma9_18", "d_tvv_ema9_18",
+        "d_tvv_sma21_108", "d_tvv_ema21_108", "m_tvv_cmf",
+    ],
+    "FE_RATIOS_SIGNALS": [
+        "m_rat_alpha_bin", "d_rat_beta_bin", "v_rat_sharpe_bin",
+        "v_rat_sortino_bin", "v_rat_teynor_bin", "v_rat_common_sense_bin",
+        "v_rat_information_bin", "v_rat_win_loss_bin", "m_rat_win_rate_bin",
+        "m_rat_ror_bin", "d_rat_pain_bin",
+    ],
+}
+
+
+def _core4_sql(presence_only: bool) -> str:
+    """SQL for the distinct (slug,date) core-4 intersection.
+    presence_only=True  -> row present in all 4 core tables.
+    presence_only=False -> all required bin columns non-null in all 4 tables."""
+    ctes = []
+    names = []
+    for i, (tbl, cols) in enumerate(_CORE_TABLES.items()):
+        a = chr(97 + i)
+        if presence_only:
+            ctes.append(f"{a} AS (SELECT DISTINCT slug, timestamp::date d FROM \"{tbl}\")")
+        else:
+            cond = " AND ".join(f'"{c}" IS NOT NULL' for c in cols)
+            ctes.append(f"{a} AS (SELECT slug, timestamp::date d FROM \"{tbl}\" WHERE {cond} GROUP BY slug, d)")
+        names.append(a)
+    joins = "".join(f" JOIN {n} USING (slug, d)" for n in names[1:])
+    return f"WITH {', '.join(ctes)} SELECT COUNT(*) FROM {names[0]} {joins}"
+
 
 def _dsn() -> str:
     dsn = os.getenv("CP_BACKTEST_DSN")
@@ -145,6 +184,10 @@ async def main() -> None:
     momentum_rows = await _q('SELECT COUNT(*) FROM (SELECT DISTINCT slug, timestamp::date FROM "FE_MOMENTUM_SIGNALS") x')
     ratios_rows = await _q('SELECT COUNT(*) FROM (SELECT DISTINCT slug, timestamp::date FROM "FE_RATIOS_SIGNALS") x')
     ohlcv_total_rows = await _q('SELECT COUNT(*) FROM "1K_coins_ohlcv"')
+    # measured core-4 presence + complete intersections (exact reconciliation)
+    core4_present = await _q(_core4_sql(presence_only=True))
+    core4_complete = await _q(_core4_sql(presence_only=False))
+    old_dmv_rows = await _q('SELECT COUNT(*) FROM "FE_DMV_ALL"')
     await conn.close()
     print(f"[sample] OHLCV rows={len(ohlcv)} slugs={ohlcv['slug'].nunique()} "
           f"dates={ohlcv['timestamp'].nunique()} in {time.time()-T0:.0f}s", flush=True)
@@ -227,6 +270,8 @@ async def main() -> None:
         ohlcv, sigs,
         full_universe_rows=full_universe_rows, momentum_rows=momentum_rows,
         ratios_rows=ratios_rows, ohlcv_total_rows=ohlcv_total_rows,
+        core4_present=core4_present, core4_complete=core4_complete,
+        old_dmv_rows=old_dmv_rows,
     )
 
     payload = {
@@ -290,11 +335,26 @@ def estimate_full_rebuild(
     momentum_rows: int,
     ratios_rows: int,
     ohlcv_total_rows: int,
+    core4_present: int,
+    core4_complete: int,
+    old_dmv_rows: int,
 ) -> dict:
-    """Estimate the full shadow rebuild from real backtest history counts."""
+    """Estimate the full shadow rebuild from real backtest history counts.
+
+    Exact reconciliation (all measured read-only from cp_backtest):
+      universe (PIT_APPROX distinct slug,date)        -> full_universe_rows
+      core-4 presence intersection                    -> core4_present
+      core-4 complete (all required bins non-null)    -> core4_complete
+      incomplete core rows                            = core4_present - core4_complete
+      valid scored shadow output rows                 = core4_complete (floor;
+      the PIT rebuild may add currently-delisted slugs' rows => up to universe bound)
+    """
     per_date = ohlcv.groupby(ohlcv["timestamp"].dt.date).size()
     avg_per_date = float(per_date.mean())
-
+    incomplete_core = core4_present - core4_complete
+    incomplete_rate = incomplete_core / core4_present if core4_present else 0.0
+    # sample all-4-core rate (kept for context; NOT the estimate base — it is
+    # inflated by the delisted asset which has no rows in the old signal tables)
     fams = CORE_FAMILIES
     def have_all(row):
         return all(
@@ -304,16 +364,28 @@ def estimate_full_rebuild(
     all4 = sum(1 for _, row in sigs.iterrows() if have_all(row)) if len(sigs) else 0
     all4_rate = all4 / len(sigs) if len(sigs) else 0.0
 
-    est_dmv_4core = int(momentum_rows * all4_rate)
     return {
         "sample_avg_rows_per_date": round(avg_per_date, 1),
         "full_universe_rows": int(full_universe_rows),
         "ohlcv_total_rows": int(ohlcv_total_rows),
         "momentum_signal_rows": int(momentum_rows),
         "ratios_signal_rows": int(ratios_rows),
-        "sample_all4_core_rate": round(all4_rate, 4),
-        "estimated_dmv_rows_4core": est_dmv_4core,
+        "core4_presence_intersection": int(core4_present),
+        "core4_complete_rows": int(core4_complete),
+        "incomplete_core_rows": int(incomplete_core),
+        "incomplete_core_rate": round(incomplete_rate, 4),
+        "old_canonical_dmv_rows": int(old_dmv_rows),
+        "sample_all4_core_rate_context": round(all4_rate, 4),
+        "estimated_dmv_rows_4core": int(core4_complete),
         "estimated_dmv_rows_universe_upper": int(full_universe_rows),
+        "reconciliation_note": (
+            "Estimated shadow scored rows = measured core-4 COMPLETE count "
+            f"({core4_complete:,}); the earlier ~817k estimate was an underestimate "
+            "because it multiplied momentum_rows by the sample all-4-core rate, which is "
+            "inflated by the delisted asset (no rows in the old listings-joined signal "
+            "tables). The PIT rebuild may add currently-delisted slugs' rows, so the "
+            "expected shadow output lies in [1,173,651 .. 2,590,975]."
+        ),
         "runtime_estimate": {
             "pit_layer_only": "≈ 10-15 min for ~2.6M rows (sample 38.7s / 7,474 rows, near-linear)",
             "full_rebuild_incl_signal_regeneration": (
@@ -325,12 +397,12 @@ def estimate_full_rebuild(
                              "external data, no new infra; dominant cost is wall-clock",
         "athena_scan_volume": "0 GB — rebuild reads RDS OHLCV only; no Athena (canonical "
                               "UTXO/Athena tables untouched)",
-        "rds_write_volume": "≈ 2.0-3.5M rows written across shadow FE_*_SIGNALS + "
-                            "FE_DMV_ALL/SCORES (~500MB-1GB); to a shadow schema, not canonical",
+        "rds_write_volume": "≈ 1.2-3.5M rows written across shadow FE_*_SIGNALS + "
+                            "FE_DMV_ALL/SCORES (~0.5-1GB); to a shadow schema, not canonical",
         "rollback_method": (
-            "Shadow rebuild targets versioned shadow tables (e.g. pit_dmv_YYYYMMDD.* / a "
-            "shadow schema). Rollback = DROP the shadow schema; canonical FE_* history is "
-            "never touched, so it is fully reversible with zero impact on production."
+            "Shadow rebuild targets versioned shadow tables (pit_dmv_<version>.*). Rollback "
+            "= DROP the shadow schema; canonical FE_* history is never touched, so it is "
+            "fully reversible with zero impact on production."
         ),
         "target": "versioned shadow tables; canonical DMV history never overwritten",
         "note": "Numbers from read-only cp_backtest; no production tables written.",

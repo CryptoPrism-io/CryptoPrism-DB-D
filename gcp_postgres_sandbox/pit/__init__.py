@@ -22,6 +22,7 @@ from pit.var_cvar import calculate_var_cvar_pit
 from pit.metrics import calculate_metrics_pit
 from pit.universe import PITUniverse
 from pit.scores import compute_scores, validate_bin_columns
+from pit.targets import assert_shadow_schema, shadow_schema, SHADOW_SCHEMA_PREFIX
 from pit.policy import (
     METHODOLOGY_VERSION,
     SIGNAL_FAMILIES,
@@ -31,6 +32,7 @@ from pit.policy import (
     VAR_CVAR_METHODOLOGY,
     METRICS_METHODOLOGY,
     UNIVERSE_METHODOLOGY,
+    UNIVERSE_META,
     NEUTRAL_FILL,
 )
 
@@ -42,6 +44,9 @@ __all__ = [
     "PITUniverse",
     "compute_scores",
     "validate_bin_columns",
+    "assert_shadow_schema",
+    "shadow_schema",
+    "SHADOW_SCHEMA_PREFIX",
     "METHODOLOGY_VERSION",
     "SIGNAL_FAMILIES",
     "CORE_FAMILIES",
@@ -50,5 +55,6 @@ __all__ = [
     "VAR_CVAR_METHODOLOGY",
     "METRICS_METHODOLOGY",
     "UNIVERSE_METHODOLOGY",
+    "UNIVERSE_META",
     "NEUTRAL_FILL",
 ]

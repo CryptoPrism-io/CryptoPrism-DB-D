@@ -15,7 +15,8 @@ from pit.var_cvar import calculate_var_cvar_pit, var_cvar_old_fullsample
 from pit.metrics import calculate_metrics_pit
 from pit.universe import PITUniverse
 from pit.scores import compute_scores, validate_bin_columns
-from pit.policy import CORE_FAMILIES, SIGNAL_FAMILIES, core_bin_columns
+from pit.targets import assert_shadow_schema, shadow_schema
+from pit.policy import CORE_FAMILIES, SIGNAL_FAMILIES, core_bin_columns, UNIVERSE_META
 
 
 # ── synthetic deterministic data ──────────────────────────────────────────
@@ -278,3 +279,25 @@ def test_future_row_mutation_does_not_change_output_at_d():
     oa = old_a[(old_a["slug"] == "bitcoin") & (old_a["timestamp"] == d0)]["d_pct_var_old"].iloc[0]
     ob = old_b[(old_b["slug"] == "bitcoin") & (old_b["timestamp"] == d0)]["d_pct_var_old"].iloc[0]
     assert oa != ob  # legacy approach leaks future data
+
+# -- 9. shadow-schema guard ----------------------------------------------
+def test_shadow_schema_guard_rejects_canonical():
+    import pytest
+    for bad in ("public", "dbcp", "cp_backtest", "FE_DMV_ALL", "FE_DMV_SCORES", "pit_dmv", "Pit_Dmv_v1"):
+        with pytest.raises(ValueError):
+            assert_shadow_schema(bad)
+
+
+def test_shadow_schema_guard_accepts_versioned():
+    assert assert_shadow_schema("pit_dmv_20260809") == "pit_dmv_20260809"
+    assert shadow_schema("2026-08-09") == "pit_dmv_2026_08_09"
+    assert shadow_schema("v1") == "pit_dmv_v1"
+
+
+# -- 10. universe metadata label -----------------------------------------
+def test_universe_meta_is_ohlcv_observed_not_cmc():
+    assert UNIVERSE_META["universe_method"] == "PIT_APPROX"
+    assert UNIVERSE_META["no_historical_rank_or_mcap_claim"] is True
+    assert "OHLCV-observed" in UNIVERSE_META["description"]
+    assert UNIVERSE_META["upgrade_path"].startswith("CMC_SNAPSHOT")
+    assert "sparse_gap_limitation" in UNIVERSE_META
