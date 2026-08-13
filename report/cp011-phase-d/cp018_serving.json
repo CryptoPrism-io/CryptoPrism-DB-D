@@ -1,0 +1,9 @@
+{
+  "top_n": 100,
+  "written": 100,
+  "rows_in_table": 100,
+  "generated_at": "2026-08-13T08:35:56.977755+00:00",
+  "schema_table": "cp018_serving.dmv_latest_top100",
+  "database": "cp_backtest",
+  "incomplete_count": 1
+}
