@@ -285,28 +285,55 @@ def preflight(slugs, start, end, schema, source_rows_est: int) -> dict:
 async def main() -> None:
     ap = argparse.ArgumentParser(description="CP-011 bounded shadow-rebuild runner (PIT-safe)")
     ap.add_argument("--shadow-schema", required=True, help="target schema, must start with pit_dmv_")
-    ap.add_argument("--slugs", required=True, help="comma-separated asset slugs")
+    ap.add_argument("--slugs", required=False, help="comma-separated asset slugs (or use --all-slugs)")
+    ap.add_argument("--all-slugs", action="store_true", help="use the full OHLCV-observed universe")
     ap.add_argument("--start", required=True, help="YYYY-MM-DD")
     ap.add_argument("--end", required=True, help="YYYY-MM-DD")
+    ap.add_argument("--methodology-version", default=METHODOLOGY_VERSION, help="methodology version label")
     ap.add_argument("--dry-run", action="store_true", help="preflight only, no writes")
     args = ap.parse_args()
 
     schema = assert_shadow_schema(args.shadow_schema)  # raises on canonical/empty/non-pit_dmv_
-    slugs = [s.strip() for s in args.slugs.split(",") if s.strip()]
-    if not slugs:
-        raise SystemExit("--slugs must be non-empty")
+    if args.all_slugs:
+        slugs = None  # resolved from the source below
+    else:
+        slugs = [s.strip() for s in args.slugs.split(",") if s.strip()]
+        if not slugs:
+            raise SystemExit("--slugs must be non-empty (or use --all-slugs)")
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", args.start) or not re.match(r"^\d{4}-\d{2}-\d{2}$", args.end):
         raise SystemExit("--start/--end must be YYYY-MM-DD")
     if args.start > args.end:
         raise SystemExit("--start must be <= --end")
 
     conn = await _conn(DEFAULT_DB)
+    if slugs is None:  # full universe
+        rows = await conn.fetch(
+            f"""SELECT DISTINCT slug FROM \"1K_coins_ohlcv\"
+                WHERE timestamp::date BETWEEN '{args.start}' AND '{args.end}' ORDER BY slug"""
+        )
+        slugs = [r["slug"] for r in rows]
+
+    if args.dry_run:
+        n_src = await conn.fetchval(
+            f"""SELECT COUNT(*) FROM \"1K_coins_ohlcv\"
+                WHERE timestamp::date BETWEEN '{args.start}' AND '{args.end}'"""
+        )
+        n_slugs = len(slugs)
+        await conn.close()
+        pf = preflight(slugs, args.start, args.end, schema, int(n_src))
+        pf["slugs"] = n_slugs
+        pf["estimated_source_rows"] = int(n_src)
+        pf["methodology_version"] = args.methodology_version
+        print(json.dumps(pf, indent=2))
+        print("PREFLIGHT COMPLETE — no writes performed.")
+        return
+
     ohlcv = await _load_ohlcv(conn, slugs, args.start, args.end)
     sigs = await _load_signal_bins(conn, slugs, args.start, args.end)
     await conn.close()
 
     if ohlcv.empty:
-        raise SystemExit(f"no OHLCV for {slugs} in {args.start}..{args.end}")
+        raise SystemExit(f"no OHLCV for {len(slugs)} slugs in {args.start}..{args.end}")
 
     pf = preflight(slugs, args.start, args.end, schema, int(len(ohlcv)))
     print(json.dumps(pf, indent=2))

@@ -1,0 +1,560 @@
+{
+  "source": "C:\\cpio_db\\CryptoPrism-DB-cp011c\\report\\cp011-phase-d\\cp012_backtests.json",
+  "window": [
+    "2014-01-06",
+    "2026-08-11"
+  ],
+  "panel_rows": 2024772,
+  "leakage_check": {
+    "duplicate_slug_date": 0,
+    "non_ascending_date_runs": 0,
+    "factors_pit": true,
+    "returns_future_only": true
+  },
+  "classification_rules": {
+    "PROMOTION_CANDIDATE": "material (|IC|>=0.05 and CI excludes 0) AND FDR-significant",
+    "NEEDS_MORE_VALIDATION": "FDR-sig but not material, or small sample",
+    "REJECTED": "no data"
+  },
+  "experiments": [
+    {
+      "factor": "durability_score",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4512,
+      "ic_pearson_mean": -0.0091,
+      "ic_spearman_mean": -0.0162,
+      "ci95_low": -0.0137,
+      "ci95_high": -0.0045,
+      "p_value": 0.000124,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "durability_score",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4506,
+      "ic_pearson_mean": -0.0007,
+      "ic_spearman_mean": -0.0193,
+      "ci95_low": -0.0056,
+      "ci95_high": 0.0042,
+      "p_value": 0.780221,
+      "bh_significant": false,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_FDR_SIGNIFICANT"
+      ]
+    },
+    {
+      "factor": "durability_score",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4483,
+      "ic_pearson_mean": -0.0122,
+      "ic_spearman_mean": -0.0359,
+      "ci95_low": -0.0171,
+      "ci95_high": -0.0072,
+      "p_value": 2e-06,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "momentum_score",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0185,
+      "ic_spearman_mean": -0.0332,
+      "ci95_low": -0.0234,
+      "ci95_high": -0.0136,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "momentum_score",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": 0.0064,
+      "ic_spearman_mean": -0.0183,
+      "ci95_low": 0.0012,
+      "ci95_high": 0.0116,
+      "p_value": 0.016441,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "momentum_score",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": 0.0085,
+      "ic_spearman_mean": -0.0159,
+      "ci95_low": 0.0035,
+      "ci95_high": 0.0134,
+      "p_value": 0.000774,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "valuation_score",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0085,
+      "ic_spearman_mean": -0.0244,
+      "ci95_low": -0.0133,
+      "ci95_high": -0.0038,
+      "p_value": 0.000449,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "valuation_score",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": 0.0055,
+      "ic_spearman_mean": -0.0206,
+      "ci95_low": 0.0007,
+      "ci95_high": 0.0103,
+      "p_value": 0.023855,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "valuation_score",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": 0.0023,
+      "ic_spearman_mean": -0.0285,
+      "ci95_low": -0.0023,
+      "ci95_high": 0.007,
+      "p_value": 0.331272,
+      "bh_significant": false,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_FDR_SIGNIFICANT"
+      ]
+    },
+    {
+      "factor": "d_pct_var",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0247,
+      "ic_spearman_mean": 0.0266,
+      "ci95_low": -0.0308,
+      "ci95_high": -0.0186,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_pct_var",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.034,
+      "ic_spearman_mean": 0.0403,
+      "ci95_low": -0.0399,
+      "ci95_high": -0.0281,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_pct_var",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0491,
+      "ic_spearman_mean": 0.0538,
+      "ci95_low": -0.0547,
+      "ci95_high": -0.0434,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_pct_cvar",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0258,
+      "ic_spearman_mean": 0.024,
+      "ci95_low": -0.0317,
+      "ci95_high": -0.0198,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_pct_cvar",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.0357,
+      "ic_spearman_mean": 0.0381,
+      "ci95_low": -0.0414,
+      "ci95_high": -0.03,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_pct_cvar",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0538,
+      "ic_spearman_mean": 0.0474,
+      "ci95_low": -0.0593,
+      "ci95_high": -0.0484,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": true,
+      "class": "PROMOTION_CANDIDATE",
+      "reasons": [
+        "MATERIAL",
+        "FDR_SIG",
+        "IC=-0.054 CI=[-0.059,-0.048]"
+      ]
+    },
+    {
+      "factor": "v_met_ath",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0001,
+      "ic_spearman_mean": 0.0052,
+      "ci95_low": -0.0034,
+      "ci95_high": 0.0031,
+      "p_value": 0.952415,
+      "bh_significant": false,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_FDR_SIGNIFICANT"
+      ]
+    },
+    {
+      "factor": "v_met_ath",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.0044,
+      "ic_spearman_mean": 0.0028,
+      "ci95_low": -0.0079,
+      "ci95_high": -0.001,
+      "p_value": 0.012803,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "v_met_ath",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0141,
+      "ic_spearman_mean": -0.0094,
+      "ci95_low": -0.0178,
+      "ci95_high": -0.0105,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "v_met_atl",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0017,
+      "ic_spearman_mean": 0.0091,
+      "ci95_low": -0.0047,
+      "ci95_high": 0.0012,
+      "p_value": 0.262803,
+      "bh_significant": false,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_FDR_SIGNIFICANT"
+      ]
+    },
+    {
+      "factor": "v_met_atl",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.0064,
+      "ic_spearman_mean": 0.0107,
+      "ci95_low": -0.0095,
+      "ci95_high": -0.0032,
+      "p_value": 6.6e-05,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "v_met_atl",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0164,
+      "ic_spearman_mean": -0.0009,
+      "ci95_low": -0.0197,
+      "ci95_high": -0.0131,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_ath_days",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0035,
+      "ic_spearman_mean": 0.0043,
+      "ci95_low": -0.0083,
+      "ci95_high": 0.0013,
+      "p_value": 0.151954,
+      "bh_significant": false,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_FDR_SIGNIFICANT"
+      ]
+    },
+    {
+      "factor": "d_met_ath_days",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.0189,
+      "ic_spearman_mean": 0.0041,
+      "ci95_low": -0.024,
+      "ci95_high": -0.0137,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_ath_days",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0332,
+      "ic_spearman_mean": 0.0046,
+      "ci95_low": -0.0389,
+      "ci95_high": -0.0276,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_atl_days",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0064,
+      "ic_spearman_mean": 0.014,
+      "ci95_low": -0.0105,
+      "ci95_high": -0.0024,
+      "p_value": 0.001973,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_atl_days",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.0111,
+      "ic_spearman_mean": 0.026,
+      "ci95_low": -0.0153,
+      "ci95_high": -0.007,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_atl_days",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0142,
+      "ic_spearman_mean": 0.039,
+      "ci95_low": -0.0185,
+      "ci95_high": -0.0099,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_coin_age_d",
+      "horizon": 1,
+      "n_pairs": 2023179,
+      "n_dates": 4523,
+      "ic_pearson_mean": -0.0017,
+      "ic_spearman_mean": 0.0121,
+      "ci95_low": -0.0064,
+      "ci95_high": 0.0029,
+      "p_value": 0.472382,
+      "bh_significant": false,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_FDR_SIGNIFICANT"
+      ]
+    },
+    {
+      "factor": "d_met_coin_age_d",
+      "horizon": 7,
+      "n_pairs": 2013558,
+      "n_dates": 4517,
+      "ic_pearson_mean": -0.0163,
+      "ic_spearman_mean": 0.0175,
+      "ci95_low": -0.0214,
+      "ci95_high": -0.0113,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    },
+    {
+      "factor": "d_met_coin_age_d",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0281,
+      "ic_spearman_mean": 0.0286,
+      "ci95_low": -0.0334,
+      "ci95_high": -0.0227,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": false,
+      "class": "NEEDS_MORE_VALIDATION",
+      "reasons": [
+        "NOT_MATERIAL"
+      ]
+    }
+  ],
+  "summary": {
+    "PROMOTION_CANDIDATE": 1,
+    "NEEDS_MORE_VALIDATION": 29,
+    "REJECTED": 0
+  },
+  "promotion_candidates": [
+    {
+      "factor": "d_pct_cvar",
+      "horizon": 30,
+      "n_pairs": 1976774,
+      "n_dates": 4494,
+      "ic_pearson_mean": -0.0538,
+      "ic_spearman_mean": 0.0474,
+      "ci95_low": -0.0593,
+      "ci95_high": -0.0484,
+      "p_value": 0.0,
+      "bh_significant": true,
+      "material": true,
+      "class": "PROMOTION_CANDIDATE",
+      "reasons": [
+        "MATERIAL",
+        "FDR_SIG",
+        "IC=-0.054 CI=[-0.059,-0.048]"
+      ]
+    }
+  ],
+  "note": "RECOMMENDATION ONLY. No materialization, no RDS/cache/canonical change. Factors are the PIT dmv scores/VaR/CVaR/metrics. A promotion candidate here means the factor shows material + FDR-robust predictive power on forward returns; promoting it into any production signal/strategy (e.g. CP-018) requires separate explicit approval. |IC| magnitudes are small (<=0.06)."
+}

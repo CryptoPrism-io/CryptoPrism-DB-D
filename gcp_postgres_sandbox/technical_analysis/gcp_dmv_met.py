@@ -283,7 +283,6 @@ metrics_signal.info()
 from sqlalchemy import create_engine
 
 # Create a SQLAlchemy engine to connect to the MySQL database
-#engine = create_engine('mysql+mysqlconnector://yogass09:jaimaakamakhya@dbcp.cry66wamma47.ap-south-1.rds.amazonaws.com:3306/dbcp')
 
 # TRUNCATE and INSERT for FE_METRICS_SIGNAL (dbcp) - signal schema unchanged
 with gcp_engine.connect() as conn:

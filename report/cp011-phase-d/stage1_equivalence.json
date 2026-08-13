@@ -1,0 +1,2340 @@
+{
+  "methodology": {
+    "methodology_version": "cp011_pit_v1",
+    "signal_source": "raw OHLCV regeneration via repo TA functions (gcp_dmv_*)",
+    "indicators": {
+      "momentum": {
+        "rsi_periods": [
+          9,
+          18,
+          27,
+          54,
+          108
+        ],
+        "sma": 14,
+        "roc": 9,
+        "williams": 14,
+        "smi": {
+          "period": 14,
+          "k": 3,
+          "d": 3
+        },
+        "cmo": 14,
+        "mom": 10,
+        "tsi": {
+          "short": 13,
+          "long": 25
+        }
+      },
+      "oscillators": {
+        "macd": [
+          12,
+          26,
+          9
+        ],
+        "cci": 20,
+        "adx": 14,
+        "uo": [
+          7,
+          14,
+          28
+        ],
+        "supertrend": {
+          "atr": 10,
+          "mult": 3.0
+        },
+        "aroon": 25
+      },
+      "tvv": {
+        "sma": [
+          9,
+          18,
+          21,
+          108
+        ],
+        "ema": [
+          9,
+          18,
+          21,
+          108
+        ],
+        "atr": 21,
+        "bollinger": {
+          "period": 20,
+          "std": 2.0
+        },
+        "cmf": 21
+      },
+      "ratios": {
+        "window_days": 28,
+        "min_days": 5
+      }
+    },
+    "bin_definitions": {
+      "m_mom_roc_bin": "sign(m_mom_roc) [>0=1,<0=-1]",
+      "m_mom_williams_%_bin": "> -50=1, < -50=-1",
+      "m_mom_smi_bin": ">=25=1, <=-25=-1",
+      "m_mom_cmo_bin": ">40=1, <-40=-1",
+      "m_mom_mom_bin": ">4000=1, <-4000=-1",
+      "m_osc_macd_crossover_bin": "MACD>Signal=1, MACD<Signal=-1",
+      "m_osc_cci_bin": "CCI>108=1, CCI<-108=-1",
+      "m_osc_uo_bin": "UO<33=1, UO>67=-1",
+      "m_osc_ao_bin": "AO>0=1, AO<0=-1",
+      "m_osc_trix_bin": "TRIX>0=1, TRIX<0=-1",
+      "m_tvv_obv_1d_binary": "sign(OBV 1d change)",
+      "d_tvv_sma9_18": "sign(SMA9-SMA18)",
+      "d_tvv_ema9_18": "sign(EMA9-EMA18)",
+      "d_tvv_sma21_108": "sign(SMA21-SMA108)",
+      "d_tvv_ema21_108": "sign(EMA21-EMA108)",
+      "m_tvv_cmf": "sign(CMF)",
+      "ratios_bins": "sign-based on 28d ratios (alpha/beta/omega/sharpe/sortino/treynor/common_sense/information/win_loss/win_rate/ror/pain)"
+    },
+    "note": "Declared Core-4 bins selected from regeneration; extra bins (supertrend/aroon/bollinger) computed but not scored."
+  },
+  "equivalence_sample_slugs": [
+    "bitcoin",
+    "ethereum",
+    "litecoin",
+    "dogecoin",
+    "ripple",
+    "cardano",
+    "polkadot",
+    "chainlink",
+    "uniswap",
+    "aave",
+    "sushi",
+    "yearn-finance"
+  ],
+  "equivalence": {
+    "exact_match": 813319,
+    "both_null": 54342,
+    "mismatch": 2620,
+    "regen_val_exist_null": 6679,
+    "regen_null_exist_val": 0,
+    "per_family": {
+      "oscillators": {
+        "exact_match": 185465,
+        "mismatch": 775,
+        "regen_val_exist_null": 1674,
+        "regen_null_exist_val": 0
+      },
+      "momentum": {
+        "exact_match": 155135,
+        "mismatch": 65,
+        "regen_val_exist_null": 1395,
+        "regen_null_exist_val": 0
+      },
+      "tvv": {
+        "exact_match": 183802,
+        "mismatch": 1672,
+        "regen_val_exist_null": 1674,
+        "regen_null_exist_val": 0
+      },
+      "ratios": {
+        "exact_match": 288917,
+        "mismatch": 108,
+        "regen_val_exist_null": 1936,
+        "regen_null_exist_val": 0
+      }
+    }
+  },
+  "equivalence_detail": [
+    {
+      "slug": "aave",
+      "family": "oscillators",
+      "rows_compared": 2135,
+      "exact_match": 12556,
+      "both_null": 0,
+      "mismatch": 68,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 2103,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 2102,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 2041,
+          "mismatch": 63,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 2104,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 2102,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 2104,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "aave",
+      "family": "momentum",
+      "rows_compared": 2135,
+      "exact_match": 10514,
+      "both_null": 0,
+      "mismatch": 6,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 2103,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 2101,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 2104,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 2102,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 2104,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "aave",
+      "family": "tvv",
+      "rows_compared": 2135,
+      "exact_match": 12416,
+      "both_null": 3,
+      "mismatch": 205,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 2016,
+          "mismatch": 86,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 2
+        },
+        "d_tvv_sma9_18": {
+          "match": 2102,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 2104,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 2104,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 2085,
+          "mismatch": 19,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 2005,
+          "mismatch": 98,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        }
+      }
+    },
+    {
+      "slug": "aave",
+      "family": "ratios",
+      "rows_compared": 2135,
+      "exact_match": 23207,
+      "both_null": 22,
+      "mismatch": 14,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 2110,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 2105,
+          "mismatch": 6,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 2105,
+          "mismatch": 6,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 2110,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 2111,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    },
+    {
+      "slug": "bitcoin",
+      "family": "oscillators",
+      "rows_compared": 4852,
+      "exact_match": 28866,
+      "both_null": 0,
+      "mismatch": 60,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 4819,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 4820,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 4772,
+          "mismatch": 49,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 4821,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 4818,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 4816,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "bitcoin",
+      "family": "momentum",
+      "rows_compared": 4852,
+      "exact_match": 24099,
+      "both_null": 0,
+      "mismatch": 6,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 4820,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 4821,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 4821,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 4820,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 4817,
+          "mismatch": 4,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "bitcoin",
+      "family": "tvv",
+      "rows_compared": 4852,
+      "exact_match": 28509,
+      "both_null": 244,
+      "mismatch": 173,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 4493,
+          "mismatch": 84,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 244
+        },
+        "d_tvv_sma9_18": {
+          "match": 4820,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 4818,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 4820,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 4813,
+          "mismatch": 8,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 4745,
+          "mismatch": 76,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "bitcoin",
+      "family": "ratios",
+      "rows_compared": 4852,
+      "exact_match": 0,
+      "both_null": 53372,
+      "mismatch": 0,
+      "regen_val_exist_null": 0,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "d_rat_beta_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "v_rat_sharpe_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "v_rat_sortino_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "v_rat_teynor_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "v_rat_common_sense_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "v_rat_information_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "v_rat_win_loss_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "m_rat_win_rate_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "m_rat_ror_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        },
+        "d_rat_pain_bin": {
+          "match": 0,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 0,
+          "both_null": 4852
+        }
+      }
+    },
+    {
+      "slug": "cardano",
+      "family": "oscillators",
+      "rows_compared": 3234,
+      "exact_match": 19063,
+      "both_null": 0,
+      "mismatch": 155,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 3200,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 3201,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 3053,
+          "mismatch": 150,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "cardano",
+      "family": "momentum",
+      "rows_compared": 3234,
+      "exact_match": 16007,
+      "both_null": 0,
+      "mismatch": 8,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 3200,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 3201,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 3200,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "cardano",
+      "family": "tvv",
+      "rows_compared": 3234,
+      "exact_match": 19016,
+      "both_null": 2,
+      "mismatch": 200,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 3101,
+          "mismatch": 100,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 2
+        },
+        "d_tvv_sma9_18": {
+          "match": 3202,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 3202,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 3203,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 3105,
+          "mismatch": 98,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "cardano",
+      "family": "ratios",
+      "rows_compared": 3234,
+      "exact_match": 35295,
+      "both_null": 22,
+      "mismatch": 15,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 3209,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 3210,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 3207,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 3207,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 3207,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 3207,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 3210,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 3209,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 3209,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 3210,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 3210,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    },
+    {
+      "slug": "chainlink",
+      "family": "oscillators",
+      "rows_compared": 3245,
+      "exact_match": 19199,
+      "both_null": 6,
+      "mismatch": 79,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 3211,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_osc_cci_bin": {
+          "match": 3213,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_osc_adx_bin": {
+          "match": 3138,
+          "mismatch": 75,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_osc_uo_bin": {
+          "match": 3213,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_osc_ao_bin": {
+          "match": 3212,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_osc_trix_bin": {
+          "match": 3212,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        }
+      }
+    },
+    {
+      "slug": "chainlink",
+      "family": "momentum",
+      "rows_compared": 3245,
+      "exact_match": 16056,
+      "both_null": 5,
+      "mismatch": 9,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 3206,
+          "mismatch": 7,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_mom_williams_%_bin": {
+          "match": 3213,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_mom_smi_bin": {
+          "match": 3213,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_mom_cmo_bin": {
+          "match": 3211,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_mom_mom_bin": {
+          "match": 3213,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        }
+      }
+    },
+    {
+      "slug": "chainlink",
+      "family": "tvv",
+      "rows_compared": 3245,
+      "exact_match": 19102,
+      "both_null": 8,
+      "mismatch": 174,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 3165,
+          "mismatch": 46,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 3
+        },
+        "d_tvv_sma9_18": {
+          "match": 3209,
+          "mismatch": 4,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "d_tvv_ema9_18": {
+          "match": 3209,
+          "mismatch": 4,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "d_tvv_sma21_108": {
+          "match": 3211,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "d_tvv_ema21_108": {
+          "match": 3192,
+          "mismatch": 21,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        },
+        "m_tvv_cmf": {
+          "match": 3116,
+          "mismatch": 97,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        }
+      }
+    },
+    {
+      "slug": "chainlink",
+      "family": "ratios",
+      "rows_compared": 3245,
+      "exact_match": 35411,
+      "both_null": 22,
+      "mismatch": 20,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 3220,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 3221,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 3218,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 3218,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 3218,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 3218,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 3219,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 3219,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 3219,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 3221,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 3220,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    },
+    {
+      "slug": "dogecoin",
+      "family": "oscillators",
+      "rows_compared": 4620,
+      "exact_match": 27452,
+      "both_null": 0,
+      "mismatch": 82,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 4586,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 4588,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 4512,
+          "mismatch": 77,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 4589,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 4588,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 4589,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "dogecoin",
+      "family": "momentum",
+      "rows_compared": 4620,
+      "exact_match": 22937,
+      "both_null": 0,
+      "mismatch": 8,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 4587,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 4588,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 4589,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 4584,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 4589,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "dogecoin",
+      "family": "tvv",
+      "rows_compared": 4620,
+      "exact_match": 27371,
+      "both_null": 23,
+      "mismatch": 140,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 4555,
+          "mismatch": 22,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 12
+        },
+        "d_tvv_sma9_18": {
+          "match": 4587,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 4589,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 4588,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 4572,
+          "mismatch": 17,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 4480,
+          "mismatch": 98,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 11
+        }
+      }
+    },
+    {
+      "slug": "dogecoin",
+      "family": "ratios",
+      "rows_compared": 4620,
+      "exact_match": 50549,
+      "both_null": 22,
+      "mismatch": 7,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 4596,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 4596,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 4595,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 4596,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 4596,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    },
+    {
+      "slug": "ethereum",
+      "family": "oscillators",
+      "rows_compared": 4020,
+      "exact_match": 23905,
+      "both_null": 0,
+      "mismatch": 29,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 3988,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 3989,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 3964,
+          "mismatch": 25,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 3989,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 3987,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 3988,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "ethereum",
+      "family": "momentum",
+      "rows_compared": 4020,
+      "exact_match": 19939,
+      "both_null": 0,
+      "mismatch": 6,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 3988,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 3988,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 3989,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 3985,
+          "mismatch": 4,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 3989,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "ethereum",
+      "family": "tvv",
+      "rows_compared": 4020,
+      "exact_match": 23744,
+      "both_null": 2,
+      "mismatch": 188,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 3902,
+          "mismatch": 85,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 2
+        },
+        "d_tvv_sma9_18": {
+          "match": 3989,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 3989,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 3988,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 3984,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 3892,
+          "mismatch": 97,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "ethereum",
+      "family": "ratios",
+      "rows_compared": 4020,
+      "exact_match": 43932,
+      "both_null": 22,
+      "mismatch": 24,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 3995,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 3996,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 3996,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 3996,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 3996,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 3996,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 3995,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 3988,
+          "mismatch": 8,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 3988,
+          "mismatch": 8,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 3991,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 3995,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    },
+    {
+      "slug": "litecoin",
+      "family": "oscillators",
+      "rows_compared": 4851,
+      "exact_match": 28740,
+      "both_null": 0,
+      "mismatch": 180,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 4819,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 4820,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 4646,
+          "mismatch": 174,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 4820,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 4818,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 4817,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "litecoin",
+      "family": "momentum",
+      "rows_compared": 4851,
+      "exact_match": 24092,
+      "both_null": 0,
+      "mismatch": 8,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 4814,
+          "mismatch": 6,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 4819,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 4820,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 4819,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 4820,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "litecoin",
+      "family": "tvv",
+      "rows_compared": 4851,
+      "exact_match": 28254,
+      "both_null": 485,
+      "mismatch": 181,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 4481,
+          "mismatch": 96,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 243
+        },
+        "d_tvv_sma9_18": {
+          "match": 4816,
+          "mismatch": 4,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 4820,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 4820,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 4817,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 4500,
+          "mismatch": 78,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 242
+        }
+      }
+    },
+    {
+      "slug": "litecoin",
+      "family": "ratios",
+      "rows_compared": 4851,
+      "exact_match": 53078,
+      "both_null": 33,
+      "mismatch": 8,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "d_rat_beta_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "v_rat_sharpe_bin": {
+          "match": 4824,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "v_rat_sortino_bin": {
+          "match": 4824,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "v_rat_teynor_bin": {
+          "match": 4824,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "v_rat_common_sense_bin": {
+          "match": 4824,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "v_rat_information_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "v_rat_win_loss_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "m_rat_win_rate_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "m_rat_ror_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        },
+        "d_rat_pain_bin": {
+          "match": 4826,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 3
+        }
+      }
+    },
+    {
+      "slug": "uniswap",
+      "family": "oscillators",
+      "rows_compared": 2152,
+      "exact_match": 12619,
+      "both_null": 0,
+      "mismatch": 107,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 2121,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 2120,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 2020,
+          "mismatch": 101,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 2121,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 2118,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 2119,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "uniswap",
+      "family": "momentum",
+      "rows_compared": 2152,
+      "exact_match": 10600,
+      "both_null": 0,
+      "mismatch": 5,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 2120,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 2119,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 2121,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 2119,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 2121,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "uniswap",
+      "family": "tvv",
+      "rows_compared": 2152,
+      "exact_match": 12512,
+      "both_null": 2,
+      "mismatch": 212,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 2022,
+          "mismatch": 97,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 2
+        },
+        "d_tvv_sma9_18": {
+          "match": 2119,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 2119,
+          "mismatch": 2,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 2120,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 2109,
+          "mismatch": 12,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 2023,
+          "mismatch": 98,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "uniswap",
+      "family": "ratios",
+      "rows_compared": 2152,
+      "exact_match": 23406,
+      "both_null": 22,
+      "mismatch": 2,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 2127,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 2127,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 2128,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    },
+    {
+      "slug": "yearn-finance",
+      "family": "oscillators",
+      "rows_compared": 2211,
+      "exact_match": 13065,
+      "both_null": 0,
+      "mismatch": 15,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_osc_macd_crossover_bin": {
+          "match": 2180,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_cci_bin": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_adx_bin": {
+          "match": 2168,
+          "mismatch": 12,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_uo_bin": {
+          "match": 2180,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_ao_bin": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_osc_trix_bin": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "yearn-finance",
+      "family": "momentum",
+      "rows_compared": 2211,
+      "exact_match": 10891,
+      "both_null": 0,
+      "mismatch": 9,
+      "regen_val_exist_null": 155,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_mom_roc_bin": {
+          "match": 2175,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_williams_%_bin": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_smi_bin": {
+          "match": 2180,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_cmo_bin": {
+          "match": 2177,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_mom_mom_bin": {
+          "match": 2180,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        }
+      }
+    },
+    {
+      "slug": "yearn-finance",
+      "family": "tvv",
+      "rows_compared": 2211,
+      "exact_match": 12878,
+      "both_null": 3,
+      "mismatch": 199,
+      "regen_val_exist_null": 186,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_tvv_obv_1d_binary": {
+          "match": 2083,
+          "mismatch": 95,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 2
+        },
+        "d_tvv_sma9_18": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema9_18": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_sma21_108": {
+          "match": 2177,
+          "mismatch": 3,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "d_tvv_ema21_108": {
+          "match": 2179,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 0
+        },
+        "m_tvv_cmf": {
+          "match": 2081,
+          "mismatch": 98,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 31,
+          "both_null": 1
+        }
+      }
+    },
+    {
+      "slug": "yearn-finance",
+      "family": "ratios",
+      "rows_compared": 2211,
+      "exact_match": 24039,
+      "both_null": 22,
+      "mismatch": 18,
+      "regen_val_exist_null": 242,
+      "regen_null_exist_val": 0,
+      "per_col": {
+        "m_rat_alpha_bin": {
+          "match": 2187,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_beta_bin": {
+          "match": 2187,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sharpe_bin": {
+          "match": 2186,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_sortino_bin": {
+          "match": 2186,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_teynor_bin": {
+          "match": 2186,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_common_sense_bin": {
+          "match": 2186,
+          "mismatch": 1,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_information_bin": {
+          "match": 2187,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "v_rat_win_loss_bin": {
+          "match": 2182,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_win_rate_bin": {
+          "match": 2182,
+          "mismatch": 5,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "m_rat_ror_bin": {
+          "match": 2183,
+          "mismatch": 4,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        },
+        "d_rat_pain_bin": {
+          "match": 2187,
+          "mismatch": 0,
+          "regen_null_exist_val": 0,
+          "regen_val_exist_null": 22,
+          "both_null": 2
+        }
+      }
+    }
+  ],
+  "runtime_sec": 403.4
+}

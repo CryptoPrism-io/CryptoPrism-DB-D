@@ -45,3 +45,7 @@ Thumbs.db
 .Trashes
 ehthumbs.db
 Thumbs.db
+# CP-011 large local artifacts (durable copies live in s3://cryptoprism-cp011-artifacts)
+report/cp011-phase-d/frozen_ohlcv_cp011_v2.parquet
+report/cp011-phase-d/osc_bins_cp011_v2.parquet
+cp011-stage2b.bundle

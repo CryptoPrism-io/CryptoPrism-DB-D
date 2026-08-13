@@ -1,0 +1,16 @@
+{
+  "subset": [
+    "bitcoin",
+    "ethereum",
+    "litecoin",
+    "dogecoin",
+    "vgx-token",
+    "kinic"
+  ],
+  "mono_rows": 21326,
+  "hybrid_rows": 21326,
+  "keys_equal": true,
+  "key_uniqueness": true,
+  "cell_diffs": {},
+  "pass": true
+}
