@@ -3,165 +3,165 @@
     {
       "factor": "mvrv",
       "horizon": 1,
-      "n": 231,
-      "ic_pearson": -0.0711,
-      "ic_spearman": -0.0983,
-      "ci95_low": -0.1983,
-      "ci95_high": 0.0586,
-      "p_value": 0.28243,
-      "in_sample_n": 161,
-      "oos_n": 70,
+      "n": 144,
+      "ic_pearson": -0.1983,
+      "ic_spearman": -0.149,
+      "ci95_low": -0.3505,
+      "ci95_high": -0.0359,
+      "p_value": 0.016999,
+      "in_sample_n": 100,
+      "oos_n": 44,
       "in_sample_ic": {
-        "n": 161,
-        "ic_pearson": -0.0715,
-        "ic_spearman": -0.0616,
-        "ci95_low": -0.2237,
-        "ci95_high": 0.0841,
-        "p_value": 0.36816
+        "n": 100,
+        "ic_pearson": -0.2455,
+        "ic_spearman": -0.2262,
+        "ci95_low": -0.4216,
+        "ci95_high": -0.0516,
+        "p_value": 0.013565
       },
       "out_of_sample_ic": {
-        "n": 70,
-        "ic_pearson": -0.3692,
-        "ic_spearman": -0.3375,
-        "ci95_low": -0.5559,
-        "ci95_high": -0.1469,
-        "p_value": 0.001517
+        "n": 44,
+        "ic_pearson": -0.0445,
+        "ic_spearman": -0.1164,
+        "ci95_low": -0.3369,
+        "ci95_high": 0.2558,
+        "p_value": 0.775789
       },
       "periods": {
         "period_p1": {
-          "n": 77,
-          "ic_pearson": -0.0492,
-          "ic_spearman": -0.0477,
-          "ci95_low": -0.2702,
-          "ci95_high": 0.1768,
-          "p_value": 0.672079
+          "n": 48,
+          "ic_pearson": -0.241,
+          "ic_spearman": -0.3162,
+          "ci95_low": -0.4915,
+          "ci95_high": 0.0463,
+          "p_value": 0.099089
         },
         "period_p2": {
-          "n": 77,
-          "ic_pearson": -0.1712,
-          "ic_spearman": -0.1547,
-          "ci95_low": -0.3806,
-          "ci95_high": 0.0549,
-          "p_value": 0.136921
+          "n": 48,
+          "ic_pearson": -0.1757,
+          "ic_spearman": -0.1473,
+          "ci95_low": -0.438,
+          "ci95_high": 0.1142,
+          "p_value": 0.233715
         },
         "period_p3": {
-          "n": 77,
-          "ic_pearson": -0.2879,
-          "ic_spearman": -0.3264,
-          "ci95_low": -0.4809,
-          "ci95_high": -0.0683,
-          "p_value": 0.010815
+          "n": 48,
+          "ic_pearson": -0.054,
+          "ic_spearman": -0.1281,
+          "ci95_low": -0.333,
+          "ci95_high": 0.2338,
+          "p_value": 0.717108
         }
       },
       "bh_significant": false,
-      "material": false
+      "material": true
     },
     {
       "factor": "mvrv",
       "horizon": 7,
-      "n": 228,
-      "ic_pearson": 0.0155,
-      "ic_spearman": -0.3479,
-      "ci95_low": -0.1147,
-      "ci95_high": 0.1451,
-      "p_value": 0.816536,
-      "in_sample_n": 159,
-      "oos_n": 69,
+      "n": 144,
+      "ic_pearson": -0.5226,
+      "ic_spearman": -0.4817,
+      "ci95_low": -0.6322,
+      "ci95_high": -0.3926,
+      "p_value": 0.0,
+      "in_sample_n": 100,
+      "oos_n": 44,
       "in_sample_ic": {
-        "n": 159,
-        "ic_pearson": 0.086,
-        "ic_spearman": -0.3216,
-        "ci95_low": -0.0706,
-        "ci95_high": 0.2384,
-        "p_value": 0.281839
+        "n": 100,
+        "ic_pearson": -0.6195,
+        "ic_spearman": -0.4746,
+        "ci95_low": -0.7274,
+        "ci95_high": -0.4817,
+        "p_value": 0.0
       },
       "out_of_sample_ic": {
-        "n": 69,
-        "ic_pearson": -0.8423,
-        "ic_spearman": -0.6936,
-        "ci95_low": -0.8996,
-        "ci95_high": -0.7564,
-        "p_value": 0.0
+        "n": 44,
+        "ic_pearson": -0.3405,
+        "ic_spearman": -0.3456,
+        "ci95_low": -0.5788,
+        "ci95_high": -0.0485,
+        "p_value": 0.023169
       },
       "periods": {
         "period_p1": {
-          "n": 76,
-          "ic_pearson": 0.198,
-          "ic_spearman": -0.3114,
-          "ci95_low": -0.0288,
-          "ci95_high": 0.4053,
-          "p_value": 0.08651
+          "n": 48,
+          "ic_pearson": -0.7122,
+          "ic_spearman": -0.7589,
+          "ci95_low": -0.8286,
+          "ci95_high": -0.5367,
+          "p_value": 0.0
         },
         "period_p2": {
-          "n": 76,
-          "ic_pearson": -0.3828,
-          "ic_spearman": -0.3978,
-          "ci95_low": -0.5599,
-          "ci95_high": -0.1721,
-          "p_value": 0.00057
+          "n": 48,
+          "ic_pearson": -0.2585,
+          "ic_spearman": -0.2463,
+          "ci95_low": -0.5055,
+          "ci95_high": 0.0277,
+          "p_value": 0.076055
         },
         "period_p3": {
-          "n": 76,
-          "ic_pearson": -0.7466,
-          "ic_spearman": -0.724,
-          "ci95_low": -0.832,
-          "ci95_high": -0.6266,
-          "p_value": 0.0
+          "n": 48,
+          "ic_pearson": -0.2992,
+          "ic_spearman": -0.3288,
+          "ci95_low": -0.5376,
+          "ci95_high": -0.0165,
+          "p_value": 0.038415
         }
       },
-      "bh_significant": false,
-      "material": false
+      "bh_significant": true,
+      "material": true
     },
     {
       "factor": "mvrv",
       "horizon": 30,
-      "n": 205,
-      "ic_pearson": -0.4305,
-      "ic_spearman": -0.6149,
-      "ci95_low": -0.5359,
-      "ci95_high": -0.3119,
+      "n": 144,
+      "ic_pearson": -0.6778,
+      "ic_spearman": -0.6518,
+      "ci95_low": -0.7574,
+      "ci95_high": -0.5783,
       "p_value": 0.0,
-      "in_sample_n": 143,
-      "oos_n": 62,
+      "in_sample_n": 100,
+      "oos_n": 44,
       "in_sample_ic": {
-        "n": 143,
-        "ic_pearson": -0.3599,
-        "ic_spearman": -0.5754,
-        "ci95_low": -0.4948,
-        "ci95_high": -0.2081,
-        "p_value": 8e-06
+        "n": 100,
+        "ic_pearson": -0.8386,
+        "ic_spearman": -0.6042,
+        "ci95_low": -0.8886,
+        "ci95_high": -0.7688,
+        "p_value": 0.0
       },
       "out_of_sample_ic": {
-        "n": 62,
-        "ic_pearson": -0.9666,
-        "ic_spearman": -0.9117,
-        "ci95_low": -0.9798,
-        "ci95_high": -0.945,
+        "n": 44,
+        "ic_pearson": -0.8486,
+        "ic_spearman": -0.6149,
+        "ci95_low": -0.915,
+        "ci95_high": -0.7375,
         "p_value": 0.0
       },
       "periods": {
         "period_p1": {
-          "n": 68,
-          "ic_pearson": -0.2679,
-          "ic_spearman": -0.5544,
-          "ci95_low": -0.4759,
-          "ci95_high": -0.0315,
-          "p_value": 0.026822
+          "n": 48,
+          "ic_pearson": -0.9667,
+          "ic_spearman": -0.8628,
+          "ci95_low": -0.9813,
+          "ci95_high": -0.941,
+          "p_value": 0.0
         },
         "period_p2": {
-          "n": 68,
-          "ic_pearson": -0.5776,
-          "ic_spearman": -0.5046,
-          "ci95_low": -0.7172,
-          "ci95_high": -0.3933,
+          "n": 48,
+          "ic_pearson": -0.7596,
+          "ic_spearman": -0.7421,
+          "ci95_low": -0.8584,
+          "ci95_high": -0.6063,
           "p_value": 0.0
         },
         "period_p3": {
-          "n": 69,
-          "ic_pearson": -0.9743,
-          "ic_spearman": -0.9334,
-          "ci95_low": -0.9841,
-          "ci95_high": -0.9587,
+          "n": 48,
+          "ic_pearson": -0.7841,
+          "ic_spearman": -0.6255,
+          "ci95_low": -0.8736,
+          "ci95_high": -0.6432,
           "p_value": 0.0
         }
       },
@@ -842,9 +842,9 @@
     }
   ],
   "coverage": {
-    "mvrv": 231,
+    "mvrv": 145,
     "realized_cap_usd": 231,
-    "cdd": 208,
+    "cdd": 209,
     "sopr": 202,
     "news": 601
   }
