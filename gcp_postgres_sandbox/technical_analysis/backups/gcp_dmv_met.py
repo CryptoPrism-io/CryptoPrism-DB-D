@@ -33,8 +33,8 @@ import pandas as pd
 db_host = "34.55.195.199"         # Public IP of your PostgreSQL instance on GCP
 db_name = "dbcp"                  # Database name
 db_name_bt = "cp_backtest"                  # Database name
-db_user = "yogass09"              # Database username
-db_password = "jaimaakamakhya"     # Database password
+db_user = "<USER>"              # Database username
+db_password = "<PASSWORD>"     # Database password
 db_port = 5432                    # PostgreSQL port
 
 # Create a SQLAlchemy engine for PostgreSQL
@@ -253,7 +253,6 @@ metrics_signal.info()
 from sqlalchemy import create_engine
 
 # Create a SQLAlchemy engine to connect to the MySQL database
-#engine = create_engine('mysql+mysqlconnector://yogass09:jaimaakamakhya@dbcp.cry66wamma47.ap-south-1.rds.amazonaws.com:3306/dbcp')
 
 # Write the DataFrame to a new table in the database
 metrics_signal.to_sql('FE_METRICS_SIGNAL', con=gcp_engine, if_exists='replace', index=False)

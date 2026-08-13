@@ -1,0 +1,14 @@
+# CP-012 full backtest worker image (read-only).
+# Build context: aws/cp011-stage2b/  (app/ + requirements.txt + runner + s3 helpers)
+FROM python:3.13-slim
+
+WORKDIR /app
+
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ /app/app/
+COPY run_cp012_aws.sh s3_upload.py s3_download.py /app/
+
+ENV GITHUB_ACTIONS=1
+ENTRYPOINT ["bash", "/app/run_cp012_aws.sh"]

@@ -1,0 +1,80 @@
+{
+  "old_rows": 61239,
+  "new_rows": 61239,
+  "rows_equal": true,
+  "keys_equal": true,
+  "key_uniqueness": true,
+  "only_old_keys": 0,
+  "only_new_keys": 0,
+  "null_patterns_equal": true,
+  "null_diff_cols": [],
+  "float_mismatch_cols": [
+    {
+      "d_rat_beta": 298
+    },
+    {
+      "v_rat_sharpe": 3
+    },
+    {
+      "v_rat_teynor": 298
+    },
+    {
+      "v_rat_common_sense": 4
+    },
+    {
+      "v_rat_information": 297
+    }
+  ],
+  "bin_cell_diffs": 0,
+  "bin_mismatch_cols": [],
+  "dtype_match": {
+    "m_rat_alpha": true,
+    "d_rat_beta": true,
+    "v_rat_sharpe": true,
+    "v_rat_sortino": true,
+    "v_rat_teynor": true,
+    "v_rat_common_sense": true,
+    "v_rat_information": true,
+    "v_rat_win_loss": true,
+    "m_rat_win_rate": true,
+    "m_rat_ror": true,
+    "d_rat_pain": true
+  },
+  "inf_counts": {
+    "old": {
+      "m_rat_alpha": 0,
+      "d_rat_beta": 0,
+      "v_rat_sharpe": 0,
+      "v_rat_sortino": 0,
+      "v_rat_teynor": 0,
+      "v_rat_common_sense": 0,
+      "v_rat_information": 0,
+      "v_rat_win_loss": 24,
+      "m_rat_win_rate": 0,
+      "m_rat_ror": 0,
+      "d_rat_pain": 0
+    },
+    "new": {
+      "m_rat_alpha": 0,
+      "d_rat_beta": 0,
+      "v_rat_sharpe": 0,
+      "v_rat_sortino": 0,
+      "v_rat_teynor": 0,
+      "v_rat_common_sense": 0,
+      "v_rat_information": 0,
+      "v_rat_win_loss": 24,
+      "m_rat_win_rate": 0,
+      "m_rat_ror": 0,
+      "d_rat_pain": 0
+    }
+  },
+  "reference_sec": 817.43,
+  "fast_sec": 956.06,
+  "speedup": 0.85,
+  "snapshot": "C:\\cpio_db\\CryptoPrism-DB-cp011c\\gcp_postgres_sandbox\\pit\\frozen_sample_30.parquet",
+  "rows": 66031,
+  "slugs": 28,
+  "dates": 4852,
+  "total_sec": 1775.51,
+  "equiv_pass": false
+}

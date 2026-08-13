@@ -1,0 +1,34 @@
+{
+  "sample_slugs": 30,
+  "sample_rows": 66031,
+  "sample_dates": 4852,
+  "components_sec": {
+    "momentum": 0.4847438335418701,
+    "oscillators": 4.305311918258667,
+    "tvv": 0.4087662696838379,
+    "ratios": 797.0039598941803,
+    "var_cvar": 9.611472129821777,
+    "metrics": 0.6787383556365967,
+    "assemble": 799.6209688186646
+  },
+  "per_row_us": {
+    "momentum": 7.341155420058308,
+    "oscillators": 65.20137387376637,
+    "tvv": 6.190520659748268,
+    "ratios": 12070.148262091749,
+    "var_cvar": 145.5599965140885,
+    "metrics": 10.279086423597956,
+    "assemble": 12109.781296946352
+  },
+  "projected_2592976_rows_sec": {
+    "momentum": 19.0,
+    "oscillators": 169.0,
+    "tvv": 16.0,
+    "ratios": 31298.0,
+    "var_cvar": 377.0,
+    "metrics": 27.0,
+    "assemble": 31400.0
+  },
+  "projected_total_sec": 63306.0,
+  "projected_total_hrs": 17.6
+}

@@ -1,0 +1,43 @@
+{
+  "reconciled_at_utc": "2026-08-13T00:00:00Z",
+  "summary": "Two distinct CP-011 implementations confirmed; databases not interchangeable; sibling never executed; sibling's own CP-012 adapter design points at the validated pit_dmv_* output. No live data conflict.",
+  "implementation_A_validated": {
+    "repo": "CryptoPrism-DB-cp011c",
+    "branch": "feat/cp011-phase-d-hybrid-rebuild",
+    "commit": "758ac199d18f1095de1f6548b90ed490b555cf10",
+    "status": "COMPLETE — Stage 2B executed on AWS Fargate; Stage 3 PASS",
+    "target_database": "cp_backtest",
+    "source_tables": ["1K_coins_ohlcv (raw OHLCV regeneration)"],
+    "output_schema": "pit_dmv_cp011_v2_20260812_1315",
+    "output_tables": ["dmv_rows", "shadow_run_meta", "chunk_progress"],
+    "rows": 2593976,
+    "methodology_version": "cp011_pit_v2_current_main_full_regen",
+    "purpose": "PIT-safe DMV (Core-4 signal bins + VaR/CVaR + metrics + scores) — the CP-012 forward-return source"
+  },
+  "implementation_B_sibling": {
+    "repo": "cryptoprism-onchain-cp011",
+    "branch": "feat/cp011-pit-shadow-backtest",
+    "commit": "0f8bf33 (local safety commit, NOT for merge) + bbe43a5/92f4fea (CP-012 design docs)",
+    "status": "COMMITTED but NEVER EXECUTED (cp011_shadow in dbcp is an empty shell; research_frame=0, frozen_manifest=0)",
+    "target_database": "dbcp",
+    "source_tables": ["onchain_utxo_metrics", "onchain_daily_metrics", "FE_NEWS_SIGNALS", "1K_coins_ohlcv (BTC price)"],
+    "output_schema": "cp011_shadow",
+    "output_tables": ["research_frame", "frozen_manifest", "partition_log", "reason_codes"],
+    "rows": 0,
+    "run_id_default": "cp011_pit_v2_current_main_full_regen",
+    "purpose": "BTC factor-research frame (mvrv/realized_cap/cdd/sopr + news sentiment + forward returns) feeding CP-012 IC backtests / CP-020 recommendation"
+  },
+  "findings": {
+    "databases_not_interchangeable": true,
+    "cp011_shadow_dbcp_state": "empty shell only (reason_codes=3; research_frame=0) — migration 008 applied, rebuild never run",
+    "sibling_own_cp012_adapter": "commit bbe43a5: 'CP-012 cross-sectional adapter design — consume pit_dmv_* dmv_rows' => the sibling explicitly targets the validated pit_dmv_* output as the CP-012 source",
+    "naming_collision": "both use the string cp011_pit_v2_current_main_full_regen (validated=methodology_version; sibling=run_id). No functional conflict while sibling is unrun; must be disambiguated if the sibling research frame is ever executed."
+  },
+  "reconciliation_decision": {
+    "authoritative_for_CP011_CP012": "Validated implementation A output (pit_dmv_cp011_v2_20260812_1315 in cp_backtest) is the CP-011 deliverable and the CP-012 forward-return source.",
+    "sibling_research_frame": "PARKED. Do not merge (commit message: NOT for merge). If the BTC factor-research frame (mvrv/cdd/sopr/news IC backtests) is explicitly requested, it may be run against dbcp -> cp011_shadow under a DISAMBIGUATED run-id (e.g., cp011_factor_research_v2); never against cp_backtest, never pointed at pit_dmv_* tables, and never combined with implementation A.",
+    "no_sibling_changes": "The sibling implementation was NOT run, imported, migrated, or combined with the validated one during reconciliation.",
+    "schema_cleanup": "The empty cp011_shadow shell in dbcp was DROPPED 2026-08-13 (verified research_frame=0, frozen_manifest=0 before drop; sibling-owner approved). No cp011_* schemas remain in dbcp. The sibling's migration 008 would recreate it if the factor-research frame is ever run."
+  },
+  "gates_unblocked": ["CP-012 forward-return backtests (source = frozen snapshot / pit_dmv_* dmv_rows)", "CP-020 promotion recommendation (recommendation-only step)"]
+}

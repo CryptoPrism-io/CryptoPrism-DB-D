@@ -1,0 +1,334 @@
+{
+  "d_pct_cvar_h7": {
+    "full": {
+      "n_dates": 4517,
+      "ic_mean": -0.0357,
+      "ci95_low": -0.0414,
+      "ci95_high": -0.03,
+      "pct_positive": 0.373
+    },
+    "in_sample_70pct": {
+      "n_dates": 3161,
+      "ic_mean": -0.0354,
+      "ci95_low": -0.0433,
+      "ci95_high": -0.0275,
+      "pct_positive": 0.406
+    },
+    "out_of_sample_30pct": {
+      "n_dates": 1356,
+      "ic_mean": -0.0363,
+      "ci95_low": -0.0412,
+      "ci95_high": -0.0313,
+      "pct_positive": 0.297
+    },
+    "regime": {
+      "period_p1": {
+        "n_dates": 1506,
+        "ic_mean": -0.031,
+        "ci95_low": -0.0463,
+        "ci95_high": -0.0156,
+        "pct_positive": 0.463
+      },
+      "period_p2": {
+        "n_dates": 1505,
+        "ic_mean": -0.0402,
+        "ci95_low": -0.0463,
+        "ci95_high": -0.0341,
+        "pct_positive": 0.36
+      },
+      "period_p3": {
+        "n_dates": 1506,
+        "ic_mean": -0.0358,
+        "ci95_low": -0.0404,
+        "ci95_high": -0.0313,
+        "pct_positive": 0.296
+      },
+      "bull": {
+        "n_dates": 2253,
+        "ic_mean": -0.0482,
+        "ci95_low": -0.0547,
+        "ci95_high": -0.0417,
+        "pct_positive": 0.323
+      },
+      "bear": {
+        "n_dates": 2264,
+        "ic_mean": -0.0232,
+        "ci95_low": -0.0325,
+        "ci95_high": -0.0138,
+        "pct_positive": 0.423
+      },
+      "high_vol": {
+        "n_dates": 2134,
+        "ic_mean": -0.0459,
+        "ci95_low": -0.0552,
+        "ci95_high": -0.0366,
+        "pct_positive": 0.381
+      },
+      "low_vol": {
+        "n_dates": 2383,
+        "ic_mean": -0.0265,
+        "ci95_low": -0.0334,
+        "ci95_high": -0.0196,
+        "pct_positive": 0.366
+      }
+    },
+    "quintile_spread": {
+      "n_dates": 4322,
+      "spread_gross_mean": 0.59132,
+      "spread_net_of_cost": 0.59085,
+      "assumed_cost": 0.00046666666666666666,
+      "bottom_quintile_mean_ret": 0.60474,
+      "top_quintile_mean_ret": 0.01343
+    },
+    "verdict": "ROBUST"
+  },
+  "d_pct_cvar_h30": {
+    "full": {
+      "n_dates": 4494,
+      "ic_mean": -0.0538,
+      "ci95_low": -0.0593,
+      "ci95_high": -0.0484,
+      "pct_positive": 0.334
+    },
+    "in_sample_70pct": {
+      "n_dates": 3145,
+      "ic_mean": -0.057,
+      "ci95_low": -0.0644,
+      "ci95_high": -0.0496,
+      "pct_positive": 0.355
+    },
+    "out_of_sample_30pct": {
+      "n_dates": 1349,
+      "ic_mean": -0.0465,
+      "ci95_low": -0.0519,
+      "ci95_high": -0.0411,
+      "pct_positive": 0.284
+    },
+    "regime": {
+      "period_p1": {
+        "n_dates": 1498,
+        "ic_mean": -0.0622,
+        "ci95_low": -0.0764,
+        "ci95_high": -0.048,
+        "pct_positive": 0.416
+      },
+      "period_p2": {
+        "n_dates": 1498,
+        "ic_mean": -0.0535,
+        "ci95_low": -0.0597,
+        "ci95_high": -0.0473,
+        "pct_positive": 0.306
+      },
+      "period_p3": {
+        "n_dates": 1498,
+        "ic_mean": -0.0458,
+        "ci95_low": -0.0508,
+        "ci95_high": -0.0409,
+        "pct_positive": 0.278
+      },
+      "bull": {
+        "n_dates": 2253,
+        "ic_mean": -0.0754,
+        "ci95_low": -0.0814,
+        "ci95_high": -0.0694,
+        "pct_positive": 0.259
+      },
+      "bear": {
+        "n_dates": 2241,
+        "ic_mean": -0.0321,
+        "ci95_low": -0.0411,
+        "ci95_high": -0.0232,
+        "pct_positive": 0.409
+      },
+      "high_vol": {
+        "n_dates": 2134,
+        "ic_mean": -0.0594,
+        "ci95_low": -0.0682,
+        "ci95_high": -0.0506,
+        "pct_positive": 0.322
+      },
+      "low_vol": {
+        "n_dates": 2360,
+        "ic_mean": -0.0488,
+        "ci95_low": -0.0554,
+        "ci95_high": -0.0422,
+        "pct_positive": 0.344
+      }
+    },
+    "quintile_spread": {
+      "n_dates": 4299,
+      "spread_gross_mean": 0.71887,
+      "spread_net_of_cost": 0.71687,
+      "assumed_cost": 0.002,
+      "bottom_quintile_mean_ret": 0.79742,
+      "top_quintile_mean_ret": 0.07855
+    },
+    "verdict": "ROBUST"
+  },
+  "d_pct_var_h7": {
+    "full": {
+      "n_dates": 4517,
+      "ic_mean": -0.034,
+      "ci95_low": -0.0399,
+      "ci95_high": -0.0281,
+      "pct_positive": 0.39
+    },
+    "in_sample_70pct": {
+      "n_dates": 3161,
+      "ic_mean": -0.0373,
+      "ci95_low": -0.0454,
+      "ci95_high": -0.0293,
+      "pct_positive": 0.405
+    },
+    "out_of_sample_30pct": {
+      "n_dates": 1356,
+      "ic_mean": -0.0263,
+      "ci95_low": -0.0318,
+      "ci95_high": -0.0207,
+      "pct_positive": 0.356
+    },
+    "regime": {
+      "period_p1": {
+        "n_dates": 1506,
+        "ic_mean": -0.0382,
+        "ci95_low": -0.0538,
+        "ci95_high": -0.0227,
+        "pct_positive": 0.45
+      },
+      "period_p2": {
+        "n_dates": 1505,
+        "ic_mean": -0.0379,
+        "ci95_low": -0.0444,
+        "ci95_high": -0.0314,
+        "pct_positive": 0.37
+      },
+      "period_p3": {
+        "n_dates": 1506,
+        "ic_mean": -0.0259,
+        "ci95_low": -0.031,
+        "ci95_high": -0.0208,
+        "pct_positive": 0.351
+      },
+      "bull": {
+        "n_dates": 2253,
+        "ic_mean": -0.0462,
+        "ci95_low": -0.053,
+        "ci95_high": -0.0393,
+        "pct_positive": 0.352
+      },
+      "bear": {
+        "n_dates": 2264,
+        "ic_mean": -0.0219,
+        "ci95_low": -0.0315,
+        "ci95_high": -0.0124,
+        "pct_positive": 0.428
+      },
+      "high_vol": {
+        "n_dates": 2134,
+        "ic_mean": -0.0467,
+        "ci95_low": -0.0562,
+        "ci95_high": -0.0373,
+        "pct_positive": 0.392
+      },
+      "low_vol": {
+        "n_dates": 2383,
+        "ic_mean": -0.0226,
+        "ci95_low": -0.0298,
+        "ci95_high": -0.0154,
+        "pct_positive": 0.389
+      }
+    },
+    "quintile_spread": {
+      "n_dates": 4322,
+      "spread_gross_mean": 0.10082,
+      "spread_net_of_cost": 0.10035,
+      "assumed_cost": 0.00046666666666666666,
+      "bottom_quintile_mean_ret": 0.11413,
+      "top_quintile_mean_ret": 0.01331
+    },
+    "verdict": "ROBUST"
+  },
+  "d_pct_var_h30": {
+    "full": {
+      "n_dates": 4494,
+      "ic_mean": -0.0491,
+      "ci95_low": -0.0547,
+      "ci95_high": -0.0434,
+      "pct_positive": 0.373
+    },
+    "in_sample_70pct": {
+      "n_dates": 3145,
+      "ic_mean": -0.0581,
+      "ci95_low": -0.0656,
+      "ci95_high": -0.0505,
+      "pct_positive": 0.367
+    },
+    "out_of_sample_30pct": {
+      "n_dates": 1349,
+      "ic_mean": -0.028,
+      "ci95_low": -0.0341,
+      "ci95_high": -0.0219,
+      "pct_positive": 0.388
+    },
+    "regime": {
+      "period_p1": {
+        "n_dates": 1498,
+        "ic_mean": -0.0743,
+        "ci95_low": -0.0888,
+        "ci95_high": -0.0598,
+        "pct_positive": 0.398
+      },
+      "period_p2": {
+        "n_dates": 1498,
+        "ic_mean": -0.0451,
+        "ci95_low": -0.0515,
+        "ci95_high": -0.0388,
+        "pct_positive": 0.332
+      },
+      "period_p3": {
+        "n_dates": 1498,
+        "ic_mean": -0.0277,
+        "ci95_low": -0.0333,
+        "ci95_high": -0.0221,
+        "pct_positive": 0.389
+      },
+      "bull": {
+        "n_dates": 2253,
+        "ic_mean": -0.0709,
+        "ci95_low": -0.0773,
+        "ci95_high": -0.0646,
+        "pct_positive": 0.307
+      },
+      "bear": {
+        "n_dates": 2241,
+        "ic_mean": -0.027,
+        "ci95_low": -0.0362,
+        "ci95_high": -0.0178,
+        "pct_positive": 0.439
+      },
+      "high_vol": {
+        "n_dates": 2134,
+        "ic_mean": -0.0582,
+        "ci95_low": -0.067,
+        "ci95_high": -0.0494,
+        "pct_positive": 0.352
+      },
+      "low_vol": {
+        "n_dates": 2360,
+        "ic_mean": -0.0408,
+        "ci95_low": -0.048,
+        "ci95_high": -0.0336,
+        "pct_positive": 0.392
+      }
+    },
+    "quintile_spread": {
+      "n_dates": 4299,
+      "spread_gross_mean": 0.35715,
+      "spread_net_of_cost": 0.35515,
+      "assumed_cost": 0.002,
+      "bottom_quintile_mean_ret": 0.4331,
+      "top_quintile_mean_ret": 0.07595
+    },
+    "verdict": "ROBUST"
+  }
+}

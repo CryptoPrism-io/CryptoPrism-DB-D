@@ -1,0 +1,20 @@
+{
+  "snapshot": "/app/artifacts/frozen_ohlcv_cp011_v2.parquet",
+  "captured_utc": "2026-08-12T13:15:00.871906+00:00",
+  "rows": 2603883,
+  "assets": 3587,
+  "distinct_slug_date": 2593976,
+  "first_date": "2013-04-28",
+  "last_date": "2026-08-11",
+  "columns": [
+    "slug",
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "m_pct_1d"
+  ],
+  "sha256": "b8e84b7e9ee41aac9bcd01ca878de923d1143f2c628522fa10a83de2e243476f"
+}

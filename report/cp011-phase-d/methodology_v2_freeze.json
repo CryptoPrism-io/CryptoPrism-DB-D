@@ -1,0 +1,172 @@
+{
+  "methodology_id": "cp011_pit_v2_current_main_full_regen",
+  "source_commits": {
+    "ta_functions": "c5cbfb8 (main; gcp_dmv_mom/osc/tvv/rat)",
+    "regeneration_layer": "fd5f834 (branch; pit/regenerate.py, pit/policy.py)",
+    "diagnosis": "fd5f834 (docs/CP011-phaseD-stage1_5-diagnosis.md)"
+  },
+  "signal_source": "raw OHLCV regeneration ONLY (current-main TA functions); existing FE_*_SIGNALS are legacy comparison-only and never populate v2",
+  "indicators": {
+    "momentum": {
+      "rsi_periods": [
+        9,
+        18,
+        27,
+        54,
+        108
+      ],
+      "sma": 14,
+      "roc": 9,
+      "williams": 14,
+      "smi": {
+        "period": 14,
+        "k": 3,
+        "d": 3
+      },
+      "cmo": 14,
+      "mom": 10,
+      "tsi": {
+        "short": 13,
+        "long": 25
+      }
+    },
+    "oscillators": {
+      "macd": [
+        12,
+        26,
+        9
+      ],
+      "cci": 20,
+      "adx": 14,
+      "uo": [
+        7,
+        14,
+        28
+      ],
+      "supertrend": {
+        "atr": 10,
+        "mult": 3.0
+      },
+      "aroon": 25
+    },
+    "tvv": {
+      "sma": [
+        9,
+        18,
+        21,
+        108
+      ],
+      "ema": [
+        9,
+        18,
+        21,
+        108
+      ],
+      "atr": 21,
+      "bollinger": {
+        "period": 20,
+        "std": 2.0
+      },
+      "cmf": 21
+    },
+    "ratios": {
+      "window_days": 28,
+      "min_days": 5,
+      "benchmark": "bitcoin"
+    }
+  },
+  "bins": "declared SIGNAL_FAMILIES bins only (policy.py); extra computed bins (supertrend/aroon/bollinger) not scored",
+  "score_rules": "sum of approved bin columns / n_bins * 100, clipped to [-100,100]; no z-score; incomplete row = all scores NULL",
+  "warmup": "NaN during indicator warm-up (rolling periods); ratios require >=5 days in trailing 28d window",
+  "null_zero": "VaR/CVaR NULL before 252 valid obs; missing required core signal = incomplete (NULL scores); no neutral fill",
+  "var_cvar": {
+    "window_days": 365,
+    "min_obs": 252,
+    "confidence": 0.95,
+    "quantile_method": "linear"
+  },
+  "universe": {
+    "method": "PIT_APPROX",
+    "source": "1K_coins_ohlcv first-seen/last-seen",
+    "current_distinct_slug_date": 2592976,
+    "current_assets": 3586,
+    "note": "grew +2001 rows / +1 asset vs mission-start 2,590,975/3,585 due to external data ingestion"
+  },
+  "versions": {
+    "python": "3.13.3",
+    "pandas": "2.3.1",
+    "numpy": "2.3.2",
+    "sqlalchemy": "2.0.42"
+  },
+  "input_checksums": {
+    "1K_coins_ohlcv": "8f16c8283f05380d",
+    "captured": "2026-08-09T18:xx IST"
+  },
+  "stage_2a_outcome": {
+    "ratios_optimization": {
+      "decision": "reference regenerate_ratios RETAINED; indexed fast-path NOT adopted",
+      "why": "fast path bins were byte-identical (0 bin cell diffs) but raw float values differed on 298/61,239 rows (sub-threshold; same bins) due to duplicate-timestamp pandas cov/reindex alignment, AND it was ~17% SLOWER (956s vs 817s) because the whole-df filter was never the dominant cost",
+      "evidence": "report/cp011-phase-d/ratios_equivalence.json"
+    },
+    "adx_cross_slug_contamination": {
+      "finding": "gcp_dmv_osc.calculate_adx uses GLOBAL df.high.shift(1)/df.low.shift(1) for +DM/-DM (not per-slug shifts), so the first row of every slug is contaminated by the previous slug in the frame; ADX bins therefore depend on which other slugs share the frame",
+      "implication": "oscillators MUST be computed on the FULL universe frame in one pass; chunking them would change ADX values",
+      "same_family_as_stage1": true
+    },
+    "execution_design": {
+      "name": "hybrid (full-frame osc + chunked per-slug remainder)",
+      "why": "monolithic full build needs ~31 GB peak (800 MB measured on 66k rows x 39.4x) — infeasible on this 15.7 GB machine; naive chunking is NOT byte-identical (ADX); hybrid is both",
+      "mechanism": "osc pass once on full frozen snapshot -> osc_bins.parquet; then chunk the per-slug-local families (momentum/tvv/ratios/var/metrics/scores), bitcoin benchmark loaded in every chunk, bitcoin output rows emitted once by chunk 0; idempotent upserts on (slug,date,methodology_version); resumable via chunk_progress",
+      "equivalence": "byte-identical to monolithic (hybrid_equivalence.json PASS: 21,326 rows, 0 cell diffs on 6-asset subset)"
+    },
+    "validation": "ruff clean; mypy clean; pytest pit/tests 16 passed"
+  },
+  "stage_2b_status": {
+    "status": "COMPLETE — 2026-08-12/13 (AWS Fargate)",
+    "run": {
+      "shadow_schema": "pit_dmv_cp011_v2_20260812_1315",
+      "database": "cp_backtest",
+      "task_def": "cp011-stage2b:5..7 (Fargate 4 vCPU/16 GB)",
+      "image_tag": "758ac199 (digest sha256:a069731c… at run)",
+      "frozen_snapshot_sha256": "b8e84b7e9ee41aac9bcd01ca878de923d1143f2c628522fa10a83de2e243476f",
+      "source_rows": 2603883,
+      "assets": 3587,
+      "distinct_slug_date": 2593976,
+      "dmv_rows_written": 2593976,
+      "incomplete_rows": 30809,
+      "incomplete_rate": 0.0119,
+      "score_range": [-100.0, 100.0],
+      "var_cvar_null": 560036,
+      "var_cvar_null_rate": 0.2159,
+      "dup_pk_rows": 0,
+      "date_range": "2013-04-28 .. 2026-08-11",
+      "chunks": 12,
+      "stage3_pass": true
+    },
+    "artifacts_s3": "s3://cryptoprism-cp011-artifacts/cp011/stage2b/ (frozen parquet+manifest, osc_bins, stage3_validation.json)",
+    "cloudwatch_logs": "/ecs/cryptoprism-onchain/cp011-stage2b",
+    "no_canonical_writes": true,
+    "sibling_reconciliation": "COMPLETE — see docs/CP011-sibling-reconciliation.md + report/cp011-phase-d/sibling_reconciliation.json",
+    "bundle": "cp011-stage2b.bundle (tip 1fa3e1f0, sha256 F79D9861DDAD14B7DCF7D593D5A6C7ABE580A1B836A9B12E32C03C4A315F0491)",
+    "next": "CP-012 + CP-020 COMPLETE (see below); shadow-to-canonical promotion requires explicit approval"
+  },
+  "cp012_backtests": {
+    "status": "COMPLETE — 2026-08-13 (AWS Fargate 16 vCPU/64 GB)",
+    "task": "cp011-cp012:5 (image cp012-cb60c6c2; task 295bdd85)",
+    "window": "2014-01-06 .. 2026-08-11",
+    "panel_rows": 2024772,
+    "leakage_check": "PASS (0 dup keys, 0 date-order violations, factors PIT, returns future-only)",
+    "experiments": 30,
+    "fdr_significant": 24,
+    "material_effects": 1,
+    "material_detail": "d_pct_cvar h30: Pearson IC -0.0538, CI [-0.059,-0.048], p~0, FDR-sig (higher tail risk -> lower 30d forward return)",
+    "report": "report/cp011-phase-d/cp012_backtests.json + s3://cryptoprism-cp011-artifacts/cp011/stage2b/cp012_backtests.json"
+  },
+  "cp020_recommendation": {
+    "status": "COMPLETE — RECOMMENDATION ONLY (2026-08-13)",
+    "classification": {"PROMOTION_CANDIDATE": 1, "NEEDS_MORE_VALIDATION": 29, "REJECTED": 0},
+    "promotion_candidate": "d_pct_cvar h30 (IC -0.054, CI [-0.059,-0.048])",
+    "report": "report/cp011-phase-d/cp020_recommendation.json + s3://cryptoprism-cp011-artifacts/cp011/stage2b/cp020_recommendation.json",
+    "note": "No materialization / no canonical writes. Any promotion into production (e.g. CP-018) requires separate explicit approval."
+  }
+}
