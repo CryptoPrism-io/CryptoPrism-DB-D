@@ -45,8 +45,8 @@ def _factor(name: str, rows) -> pd.DataFrame:
 async def load_factors(conn) -> dict[str, pd.DataFrame]:
     out = {}
     out["mvrv"] = _factor("mvrv", await conn.fetch(
-        "SELECT metric_date AS date, value FROM onchain_utxo_metrics "
-        "WHERE chain='bitcoin' AND metric='mvrv' AND value IS NOT NULL ORDER BY metric_date"))
+        "SELECT metric_date AS date, value FROM onchain_daily_metrics "
+        "WHERE chain='btc' AND metric='mvrv_ratio' AND value IS NOT NULL ORDER BY metric_date"))
     out["realized_cap_usd"] = _factor("realized_cap_usd", await conn.fetch(
         "SELECT metric_date AS date, value FROM onchain_utxo_metrics "
         "WHERE chain='bitcoin' AND metric='realized_cap_usd' AND value IS NOT NULL ORDER BY metric_date"))
