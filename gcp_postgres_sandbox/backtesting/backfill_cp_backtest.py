@@ -7,8 +7,13 @@ The daily pipeline was only saving the latest snapshot. This script
 recomputes ALL indicators for every historical date in 1K_coins_ohlcv
 and populates cp_backtest with the full history.
 
+Every coin in 1K_coins_ohlcv is included, not just today's top 1000, so
+cp_backtest keeps the history of coins that later dropped out (no survivorship bias).
+
 Usage:
     python gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py
+    python gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py --only momentum
+    python gcp_postgres_sandbox/backtesting/backfill_cp_backtest.py --dry-run --slugs bitcoin,ethereum
 
 Phases:
     1. Diagnose current cp_backtest state
@@ -28,7 +33,7 @@ import logging
 import argparse
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from dotenv import load_dotenv
 
@@ -75,36 +80,96 @@ def create_engine_backtest():
     )
 
 
+# Set by --dry-run: compute everything, log what would be written, write nothing.
+DRY_RUN = False
+
+
+def table_columns(engine, table_name):
+    """Column names of a cp_backtest table in table order ([] if the table doesn't exist)."""
+    q = text("SELECT column_name FROM information_schema.columns "
+             "WHERE table_schema = 'public' AND table_name = :t ORDER BY ordinal_position")
+    with engine.connect() as conn:
+        return [r[0] for r in conn.execute(q, {"t": table_name})]
+
+
+def _ts_key(s):
+    """Timestamp column as UTC nanoseconds, so tz-aware and naive timestamps join."""
+    return pd.to_datetime(s, utc=True).astype("int64")
+
+
+def _carry_over(conn, df, table_name, missing):
+    """Copy existing values of columns the backfill doesn't compute (e.g. FE_DMV_ALL's
+    candlestick/Dow bins written by the daily DMV) into df by (slug, timestamp),
+    so the rewrite keeps them instead of NULLing them."""
+    keep = [c for c in missing
+            if conn.execute(text(f'SELECT COUNT("{c}") FROM "{table_name}"')).scalar()]
+    if not keep or not {"slug", "timestamp"} <= set(df.columns):
+        return df, []
+    col_sql = ", ".join(f'"{c}"' for c in keep)
+    old = pd.read_sql_query(text(f'SELECT "slug", "timestamp", {col_sql} FROM "{table_name}"'), conn)
+    old["_ts"] = _ts_key(old.pop("timestamp"))
+    old = old.drop_duplicates(["slug", "_ts"], keep="last")
+    df = df.assign(_ts=_ts_key(df["timestamp"])).merge(old, on=["slug", "_ts"], how="left").drop(columns="_ts")
+    return df, keep
+
+
 def truncate_and_insert(df, table_name, engine):
-    """TRUNCATE table then INSERT all rows in safe chunks for pg8000."""
-    logger.info(f"  Writing {len(df)} rows to {table_name}...")
+    """Replace a table's rows with df in ONE transaction, in safe chunks for pg8000.
+
+    Writes exactly the columns the table has, so indicators added to the daily DMV
+    scripts get backfilled too. Table columns df doesn't compute keep their existing
+    values (matched on slug + timestamp); if they hold no data they stay NULL.
+    If any insert fails the TRUNCATE rolls back and the old rows stay.
+    """
+    cols = table_columns(engine, table_name)
+    if not cols:
+        if DRY_RUN:
+            logger.warning(f"  {table_name} does not exist; would be created (dry run).")
+            return
+        raise LookupError(f"{table_name} does not exist")
+    missing = [c for c in cols if c not in df.columns]
     try:
-        with engine.connect() as conn:
+        with engine.begin() as conn:
+            kept = []
+            if missing:
+                df, kept = _carry_over(conn, df, table_name, missing)
+                if kept:
+                    logger.info(f"  {table_name}: keeping existing values of {len(kept)} column(s) "
+                                f"the backfill doesn't compute: {kept}")
+                still_null = [c for c in missing if c not in kept]
+                if still_null:
+                    logger.warning(f"  {table_name}: {len(still_null)} column(s) not computed and "
+                                   f"currently empty, will stay NULL: {still_null}")
+            present = [c for c in cols if c in df.columns]
+            out = df[present].replace([np.inf, -np.inf], np.nan)
+            logger.info(f"  Writing {len(out)} rows x {len(present)} columns to {table_name}"
+                        f"{' (dry run: nothing written)' if DRY_RUN else ''}...")
+            if DRY_RUN:
+                return
+            # pg8000 limit: 65535 params per batch. Safe chunk = 65535 / num_columns
+            safe_chunk = max(1, 65000 // len(present))
             conn.execute(text(f'TRUNCATE TABLE "{table_name}"'))
-            conn.commit()
-        # pg8000 limit: 65535 params per batch. Safe chunk = 65535 / num_columns
-        num_cols = len(df.columns)
-        safe_chunk = max(1, 65000 // num_cols)
-        df.to_sql(table_name, con=engine, if_exists='append',
-                  index=False, method='multi', chunksize=safe_chunk)
-        logger.info(f"  {table_name}: {len(df)} rows written (chunks of {safe_chunk}).")
+            out.to_sql(table_name, con=conn, if_exists='append',
+                       index=False, method='multi', chunksize=safe_chunk)
+        logger.info(f"  {table_name}: {len(out)} rows written (chunks of {safe_chunk}).")
     except Exception as e:
-        logger.error(f"  Error writing {table_name}: {e}")
+        logger.error(f"  Error writing {table_name} (rolled back, old rows kept): {e}")
         raise
 
 
-def fetch_all_ohlcv(engine):
-    """Fetch ALL OHLCV data (no time filter) joined with current top 1000."""
-    query = """
-        SELECT o.*
-        FROM "public"."1K_coins_ohlcv" o
-        INNER JOIN "public"."crypto_listings_latest_1000" c
-            ON o."slug" = c."slug"
-        WHERE c."cmc_rank" <= 1000
-        ORDER BY o."slug", o."timestamp"
-    """
-    logger.info("Fetching ALL OHLCV data (no time filter)...")
-    df = pd.read_sql_query(query, engine)
+def fetch_all_ohlcv(engine, slugs=None):
+    """Fetch ALL OHLCV data (no time filter) for every coin, or only `slugs` if given."""
+    query = 'SELECT o.* FROM "public"."1K_coins_ohlcv" o'
+    params = {}
+    if slugs:
+        query += ' WHERE o."slug" IN :slugs'
+        params = {"slugs": list(slugs)}
+    query = text(query + ' ORDER BY o."slug", o."timestamp"')
+    if slugs:
+        query = query.bindparams(bindparam("slugs", expanding=True))
+    logger.info(f"Fetching ALL OHLCV data (no time filter){f' for {len(slugs)} slugs' if slugs else ''}...")
+    with engine.connect() as conn:
+        df = pd.read_sql_query(query, conn, params=params)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     logger.info(f"  Fetched {len(df)} rows, "
                 f"{df['slug'].nunique()} coins, "
@@ -168,29 +233,9 @@ def phase_momentum(ohlcv_df, engine_bt):
             .pipe(calculate_tsi)
             .pipe(generate_binary_signals_momentum))
 
-    momentum_cols = [
-        "id", "slug", "name", "timestamp",
-        "open", "high", "low", "close", "volume", "market_cap",
-        "m_pct_1d", "m_mom_rsi_9", "m_mom_rsi_18", "m_mom_rsi_27",
-        "m_mom_rsi_54", "m_mom_rsi_108", "sma_14",
-        "m_mom_roc", "m_mom_williams_%", "m_mom_smi",
-        "m_mom_cmo", "m_mom_mom", "m_mom_tsi"
-    ]
-    signals_cols = [
-        "id", "slug", "name", "timestamp",
-        "m_mom_roc_bin", "m_mom_williams_%_bin", "m_mom_smi_bin",
-        "m_mom_cmo_bin", "m_mom_mom_bin"
-    ]
-
-    # Keep only columns that exist
-    mom_cols_avail = [c for c in momentum_cols if c in df.columns]
-    sig_cols_avail = [c for c in signals_cols if c in df.columns]
-
-    momentum_df = df[mom_cols_avail].replace([np.inf, -np.inf], np.nan)
-    signals_df = df[sig_cols_avail].replace([np.inf, -np.inf], np.nan)
-
-    truncate_and_insert(momentum_df, "FE_MOMENTUM", engine_bt)
-    truncate_and_insert(signals_df, "FE_MOMENTUM_SIGNALS", engine_bt)
+    # Each table takes the columns it has (see truncate_and_insert)
+    truncate_and_insert(df, "FE_MOMENTUM", engine_bt)
+    truncate_and_insert(df, "FE_MOMENTUM_SIGNALS", engine_bt)
     logger.info("  Momentum backfill complete.")
 
 
@@ -207,10 +252,12 @@ def phase_oscillators(ohlcv_df, engine_bt):
         calculate_cum_ret, calculate_macd, calculate_cci,
         calculate_adx, calculate_ultimate_oscillator,
         calculate_awesome_oscillator, calculate_trix,
+        calculate_supertrend, calculate_aroon,
         generate_binary_signals_oscillators, rename_columns_for_db
     )
 
     df = ohlcv_df.copy()
+    # Same order as gcp_dmv_osc.main(); the signals step needs Supertrend + Aroon
     df = (df.pipe(osc_pct_change)
             .pipe(calculate_cum_ret)
             .pipe(calculate_macd)
@@ -219,41 +266,15 @@ def phase_oscillators(ohlcv_df, engine_bt):
             .pipe(calculate_ultimate_oscillator)
             .pipe(calculate_awesome_oscillator)
             .pipe(calculate_trix)
+            .pipe(calculate_supertrend)
+            .pipe(calculate_aroon)
             .pipe(generate_binary_signals_oscillators))
 
     # The osc module renames columns in push_to_db; replicate here
     df = rename_columns_for_db(df)
 
-    osc_cols = [
-        "id", "slug", "name", "timestamp",
-        "open", "high", "low", "close", "volume", "market_cap",
-        "m_pct_1d", "d_pct_cum_ret",
-        "EMA_12", "EMA_26", "MACD", "Signal",
-        "TP", "SMA_TP", "MAD", "CCI",
-        "TR", "+DM", "-DM", "Smoothed_TR", "Smoothed_+DM", "Smoothed_-DM",
-        "+DI", "-DI", "DX", "ADX",
-        "prev_close", "BP",
-        "Avg_BP_short", "Avg_TR_short",
-        "Avg_BP_intermediate", "Avg_TR_intermediate",
-        "Avg_BP_long", "Avg_TR_long", "UO",
-        "MP", "SMA_5", "SMA_34", "AO",
-        "EMA1", "EMA2", "EMA3", "TRIX"
-    ]
-    sig_cols = [
-        "id", "slug", "name", "timestamp",
-        "m_osc_macd_crossover_bin", "m_osc_cci_bin",
-        "m_osc_adx_bin", "m_osc_uo_bin",
-        "m_osc_ao_bin", "m_osc_trix_bin"
-    ]
-
-    osc_avail = [c for c in osc_cols if c in df.columns]
-    sig_avail = [c for c in sig_cols if c in df.columns]
-
-    osc_df = df[osc_avail].replace([np.inf, -np.inf], np.nan)
-    sig_df = df[sig_avail].replace([np.inf, -np.inf], np.nan)
-
-    truncate_and_insert(osc_df, "FE_OSCILLATOR", engine_bt)
-    truncate_and_insert(sig_df, "FE_OSCILLATORS_SIGNALS", engine_bt)
+    truncate_and_insert(df, "FE_OSCILLATOR", engine_bt)
+    truncate_and_insert(df, "FE_OSCILLATORS_SIGNALS", engine_bt)
     logger.info("  Oscillators backfill complete.")
 
 
@@ -268,45 +289,23 @@ def phase_tvv(ohlcv_df, engine_bt):
     from gcp_dmv_tvv import (
         calculate_obv, calculate_moving_averages,
         calculate_atr, calculate_channels,
-        calculate_vwap, calculate_cmf,
+        calculate_vwap, calculate_cmf, calculate_bollinger_bands,
         generate_binary_signals
     )
 
     df = ohlcv_df.copy()
+    # Same order as gcp_dmv_tvv.main()
     df = (df.pipe(calculate_obv)
             .pipe(calculate_moving_averages)
             .pipe(calculate_atr)
             .pipe(calculate_channels)
             .pipe(calculate_vwap)
             .pipe(calculate_cmf)
+            .pipe(calculate_bollinger_bands)
             .pipe(generate_binary_signals))
 
-    tvv_cols = [
-        "id", "slug", "name", "timestamp",
-        "open", "high", "low", "close", "volume", "market_cap",
-        "obv", "m_tvv_obv_1d",
-        "SMA9", "SMA18", "EMA9", "EMA18",
-        "SMA21", "SMA108", "EMA21", "EMA108",
-        "prev_close", "tr1", "tr2", "tr3", "TR", "ATR",
-        "Keltner_Upper", "Keltner_Lower",
-        "Donchian_Upper", "Donchian_Lower",
-        "typical_price", "cum_price_volume", "cum_volume", "VWAP",
-        "ADL", "cum_adl", "CMF"
-    ]
-    sig_cols = [
-        "id", "slug", "timestamp",
-        "m_tvv_obv_1d_binary", "d_tvv_sma9_18", "d_tvv_ema9_18",
-        "d_tvv_sma21_108", "d_tvv_ema21_108", "m_tvv_cmf"
-    ]
-
-    tvv_avail = [c for c in tvv_cols if c in df.columns]
-    sig_avail = [c for c in sig_cols if c in df.columns]
-
-    tvv_df = df[tvv_avail].replace([np.inf, -np.inf], np.nan)
-    sig_df = df[sig_avail].replace([np.inf, -np.inf], np.nan)
-
-    truncate_and_insert(tvv_df, "FE_TVV", engine_bt)
-    truncate_and_insert(sig_df, "FE_TVV_SIGNALS", engine_bt)
+    truncate_and_insert(df, "FE_TVV", engine_bt)
+    truncate_and_insert(df, "FE_TVV_SIGNALS", engine_bt)
     logger.info("  TVV backfill complete.")
 
 
@@ -331,14 +330,7 @@ def phase_pct(ohlcv_df, engine_bt):
             .pipe(calculate_volume_pct_change)
             .pipe(clean_data))
 
-    pct_cols = [
-        "id", "slug", "name", "timestamp",
-        "m_pct_1d", "d_pct_cum_ret", "d_pct_var", "d_pct_cvar", "d_pct_vol_1d"
-    ]
-    pct_avail = [c for c in pct_cols if c in df.columns]
-    pct_df = df[pct_avail].replace([np.inf, -np.inf], np.nan)
-
-    truncate_and_insert(pct_df, "FE_PCT_CHANGE", engine_bt)
+    truncate_and_insert(df, "FE_PCT_CHANGE", engine_bt)
     logger.info("  PCT backfill complete.")
 
 
@@ -432,29 +424,8 @@ def phase_ratios(ohlcv_df, engine_bt):
     ratios_df = pd.concat(all_ratios, ignore_index=True)
     ratios_df = generate_binary_signals_ratios(ratios_df)
 
-    ratios_cols = [
-        'slug', 'name', 'timestamp',
-        'm_rat_alpha', 'd_rat_beta', 'm_rat_omega', 'v_rat_sharpe',
-        'v_rat_sortino', 'v_rat_teynor', 'v_rat_common_sense',
-        'v_rat_information', 'v_rat_win_loss', 'm_rat_win_rate',
-        'm_rat_ror', 'd_rat_pain'
-    ]
-    signals_cols = [
-        'slug', 'name', 'timestamp',
-        'm_rat_alpha_bin', 'd_rat_beta_bin', 'v_rat_sharpe_bin',
-        'v_rat_sortino_bin', 'v_rat_teynor_bin', 'v_rat_common_sense_bin',
-        'v_rat_information_bin', 'v_rat_win_loss_bin', 'm_rat_win_rate_bin',
-        'm_rat_ror_bin', 'd_rat_pain_bin'
-    ]
-
-    r_avail = [c for c in ratios_cols if c in ratios_df.columns]
-    s_avail = [c for c in signals_cols if c in ratios_df.columns]
-
-    r_df = ratios_df[r_avail].replace([np.inf, -np.inf], np.nan)
-    s_df = ratios_df[s_avail].replace([np.inf, -np.inf], np.nan)
-
-    truncate_and_insert(r_df, "FE_RATIOS", engine_bt)
-    truncate_and_insert(s_df, "FE_RATIOS_SIGNALS", engine_bt)
+    truncate_and_insert(ratios_df, "FE_RATIOS", engine_bt)
+    truncate_and_insert(ratios_df, "FE_RATIOS_SIGNALS", engine_bt)
     logger.info("  Ratios backfill complete.")
 
 
@@ -561,6 +532,11 @@ def phase_metrics(engine_live, engine_bt):
                     'd_met_coin_age_y_signal']]
     metrics_signal = metrics[signal_cols]
 
+    if DRY_RUN:
+        logger.info(f"  Would replace FE_METRICS ({len(metrics)} rows) and "
+                    f"FE_METRICS_SIGNAL ({len(metrics_signal)} rows) (dry run: nothing written).")
+        return
+
     # Use replace for metrics (snapshot data, avoids schema mismatch with existing table)
     logger.info(f"  Writing {len(metrics)} rows to FE_METRICS...")
     num_cols = len(metrics.columns)
@@ -642,10 +618,12 @@ def phase_core(engine_bt):
     })
 
     # FE_DMV_ALL and FE_DMV_SCORES may not exist yet in cp_backtest
-    # Use if_exists='replace' for first creation, then backfill handles future runs
+    # Use if_exists='replace' for first creation, then backfill handles future runs.
+    # Only on LookupError (table missing): any other write error has already rolled
+    # back, and replacing the table then would throw its rows away.
     try:
         truncate_and_insert(df, "FE_DMV_ALL", engine_bt)
-    except Exception:
+    except LookupError:
         logger.info("  FE_DMV_ALL does not exist yet, creating...")
         num_cols = len(df.columns)
         safe_chunk = max(1, 65000 // num_cols)
@@ -655,7 +633,7 @@ def phase_core(engine_bt):
 
     try:
         truncate_and_insert(dmv_scores, "FE_DMV_SCORES", engine_bt)
-    except Exception:
+    except LookupError:
         logger.info("  FE_DMV_SCORES does not exist yet, creating...")
         num_cols = len(dmv_scores.columns)
         safe_chunk = max(1, 65000 // num_cols)
@@ -669,15 +647,36 @@ def phase_core(engine_bt):
 # MAIN
 # ============================================================
 ALL_PHASES = ["momentum", "oscillators", "tvv", "pct", "ratios", "metrics", "core"]
+# Run only when named in --only:
+#   ratios  - loops every date x coin; ~48 h for all ~3,660 coins (needs vectorising)
+#   metrics - replaces the daily FE_METRICS snapshot history with a single current snapshot
+#   core    - rebuilds FE_DMV_ALL from the inner join of all signal tables, which today
+#             covers ~5.7k rows vs ~156k in the table (FE_METRICS_SIGNAL has only ~178 dates)
+OPT_IN_PHASES = ["ratios", "metrics", "core"]
+DEFAULT_PHASES = [p for p in ALL_PHASES if p not in OPT_IN_PHASES]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Backfill cp_backtest FE_ tables")
     parser.add_argument(
         "--only", type=str, default=None,
         help="Comma-separated phases to run. Options: " + ",".join(ALL_PHASES) +
-             ". Default: run all phases."
+             ". Default: " + ",".join(DEFAULT_PHASES) +
+             " (" + ",".join(OPT_IN_PHASES) + " only run when named here)."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Compute every selected phase and log what would be written, but write nothing."
+    )
+    parser.add_argument(
+        "--slugs", type=str, default=None,
+        help="Comma-separated slugs to limit the OHLCV fetch to (for testing; use with --dry-run)."
     )
     args = parser.parse_args()
+    DRY_RUN = args.dry_run
+    slugs = [s.strip() for s in args.slugs.split(",")] if args.slugs else None
+    if slugs and not DRY_RUN:
+        print("--slugs would TRUNCATE each table down to just those coins; use it with --dry-run.")
+        sys.exit(1)
 
     if args.only:
         selected = [p.strip().lower() for p in args.only.split(",")]
@@ -686,10 +685,13 @@ if __name__ == "__main__":
             print(f"Invalid phases: {invalid}. Valid: {ALL_PHASES}")
             sys.exit(1)
     else:
-        selected = ALL_PHASES
+        selected = DEFAULT_PHASES
+        logger.info(f"No --only given: running {', '.join(DEFAULT_PHASES)}. "
+                    f"Opt-in phases skipped: {', '.join(OPT_IN_PHASES)}.")
 
     overall_start = time.time()
-    logger.info(f"BACKFILL CP_BACKTEST - Phases: {', '.join(selected)}")
+    logger.info(f"BACKFILL CP_BACKTEST - Phases: {', '.join(selected)}"
+                f"{' (DRY RUN: nothing will be written)' if DRY_RUN else ''}")
 
     engine_live = create_engine_live()
     engine_bt = create_engine_backtest()
@@ -700,7 +702,7 @@ if __name__ == "__main__":
     # Fetch OHLCV if any OHLCV-based phase is selected
     ohlcv_phases = {"momentum", "oscillators", "tvv", "pct", "ratios"}
     if ohlcv_phases & set(selected):
-        ohlcv_df = fetch_all_ohlcv(engine_live)
+        ohlcv_df = fetch_all_ohlcv(engine_live, slugs)
     else:
         ohlcv_df = None
 

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       phases:
-        description: 'Comma-separated phases to run (momentum,oscillators,tvv,pct,ratios,metrics,core). Leave empty for all.'
+        description: 'Comma-separated phases (momentum,oscillators,tvv,pct,ratios,metrics,core). Empty = momentum,oscillators,tvv,pct; ratios, metrics and core only run when listed.'
         required: false
         default: ''
 
