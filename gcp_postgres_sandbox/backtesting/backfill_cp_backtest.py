@@ -113,12 +113,59 @@ def _carry_over(conn, df, table_name, missing):
     return df, keep
 
 
-def truncate_and_insert(df, table_name, engine):
+# Set by --allow-shrink: let a guarded rewrite drop existing (slug, timestamp) keys.
+ALLOW_SHRINK = False
+# A guarded rewrite must keep at least this share of the table's current rows.
+SHRINK_MIN_ROWS = 0.95
+
+
+def _prefer_existing(conn, df, table_name, cols):
+    """Union df with the table's current rows. Where both have a (slug, timestamp) key the
+    existing non-NULL values win (they are the real daily snapshots); df only fills their
+    NULLs and adds the keys the table doesn't have yet."""
+    col_sql = ", ".join(f'"{c}"' for c in cols)
+    old = pd.read_sql_query(text(f'SELECT {col_sql} FROM "{table_name}"'), conn)
+    if old.empty:
+        return df, 0
+    new = df[[c for c in cols if c in df.columns]].copy()
+    old["_ts"] = _ts_key(old["timestamp"])
+    new["_ts"] = _ts_key(new["timestamp"])
+    old = old.drop_duplicates(["slug", "_ts"], keep="last").set_index(["slug", "_ts"])
+    new = new.drop_duplicates(["slug", "_ts"], keep="last").set_index(["slug", "_ts"])
+    overlap = int(old.index.isin(new.index).sum())
+    out = old.combine_first(new).reset_index().drop(columns="_ts")
+    return out, overlap
+
+
+def _guard_no_shrink(conn, out, table_name):
+    """Refuse a rewrite that would drop any existing (slug, timestamp) key, or leave fewer
+    than SHRINK_MIN_ROWS of the current rows, unless --allow-shrink is given."""
+    old = pd.read_sql_query(text(f'SELECT "slug", "timestamp" FROM "{table_name}"'), conn)
+    if old.empty:
+        return
+    old_keys = pd.MultiIndex.from_arrays([old["slug"], _ts_key(old["timestamp"])])
+    new_keys = pd.MultiIndex.from_arrays([out["slug"], _ts_key(out["timestamp"])])
+    lost = int((~old_keys.isin(new_keys)).sum())
+    msg = (f"{table_name}: {len(out):,} rows vs {len(old):,} now, "
+           f"{lost:,} existing (slug, timestamp) keys would be dropped")
+    if lost == 0 and len(out) >= SHRINK_MIN_ROWS * len(old):
+        logger.info(f"  Shrink guard OK: {msg}")
+    elif ALLOW_SHRINK:
+        logger.warning(f"  Shrink guard overridden by --allow-shrink: {msg}")
+    elif DRY_RUN:
+        logger.warning(f"  Shrink guard WOULD REFUSE this write: {msg}")
+    else:
+        raise RuntimeError(f"Refusing to shrink {msg}. Re-run with --allow-shrink if intended.")
+
+
+def truncate_and_insert(df, table_name, engine, prefer_existing=False, guard=False):
     """Replace a table's rows with df in ONE transaction, in safe chunks for pg8000.
 
     Writes exactly the columns the table has, so indicators added to the daily DMV
     scripts get backfilled too. Table columns df doesn't compute keep their existing
     values (matched on slug + timestamp); if they hold no data they stay NULL.
+    prefer_existing: keep the table's existing rows and non-NULL values, df fills the rest.
+    guard: refuse the write if it would drop existing keys (see _guard_no_shrink).
     If any insert fails the TRUNCATE rolls back and the old rows stay.
     """
     cols = table_columns(engine, table_name)
@@ -127,9 +174,13 @@ def truncate_and_insert(df, table_name, engine):
             logger.warning(f"  {table_name} does not exist; would be created (dry run).")
             return
         raise LookupError(f"{table_name} does not exist")
-    missing = [c for c in cols if c not in df.columns]
     try:
         with engine.begin() as conn:
+            if prefer_existing:
+                df, overlap = _prefer_existing(conn, df, table_name, cols)
+                logger.info(f"  {table_name}: kept existing values for {overlap:,} (slug, timestamp) "
+                            f"keys already in the table; computed rows fill the rest.")
+            missing = [c for c in cols if c not in df.columns]
             kept = []
             if missing:
                 df, kept = _carry_over(conn, df, table_name, missing)
@@ -142,6 +193,8 @@ def truncate_and_insert(df, table_name, engine):
                                    f"currently empty, will stay NULL: {still_null}")
             present = [c for c in cols if c in df.columns]
             out = df[present].replace([np.inf, -np.inf], np.nan)
+            if guard:
+                _guard_no_shrink(conn, out, table_name)
             logger.info(f"  Writing {len(out)} rows x {len(present)} columns to {table_name}"
                         f"{' (dry run: nothing written)' if DRY_RUN else ''}...")
             if DRY_RUN:
@@ -432,197 +485,202 @@ def phase_ratios(ohlcv_df, engine_bt):
 # ============================================================
 # PHASE 7: METRICS (ATH/ATL, Coin Age, Market Cap Category)
 # ============================================================
-def phase_metrics(engine_live, engine_bt):
-    logger.info("=" * 60)
-    logger.info("PHASE 7: Backfilling FE_METRICS + FE_METRICS_SIGNAL")
-    logger.info("=" * 60)
+MARKET_CAP_SIGNAL = {
+    '100M-1M': 0.25, '1B-100M': 0.4, 'Under1M': 0.1,
+    '10B-1B': 0.5, '1T-100B': 1, '100B-10B': 0.75
+}
 
-    # Fetch data (replicating gcp_dmv_met.py logic)
-    with engine_live.connect() as conn:
-        ohlcv = pd.read_sql_query('SELECT * FROM "1K_coins_ohlcv"', conn)
-        listings = pd.read_sql_query("SELECT * FROM crypto_listings_latest_1000", conn)
 
-    df = ohlcv.copy()
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.sort_values(by=['slug', 'timestamp'], inplace=True)
-    grouped = df.groupby('slug')
+def fetch_date_added(engine_live, engine_bt):
+    """slug -> CMC date_added (tz-naive). dbcp's current listings win over cp_backtest's
+    accumulated copy (~2.3k slugs), which also covers coins that left the top 1000."""
+    out = {}
+    for engine in (engine_bt, engine_live):
+        with engine.connect() as conn:
+            rows = pd.read_sql_query(text('SELECT slug, date_added FROM crypto_listings_latest_1000'), conn)
+        rows['date_added'] = pd.to_datetime(rows['date_added'], errors='coerce', utc=True).dt.tz_localize(None)
+        out.update(rows.dropna(subset=['date_added']).drop_duplicates('slug', keep='last')
+                   .set_index('slug')['date_added'].to_dict())
+    return out
 
-    # Percentage change and cumulative returns
-    df['m_pct_1d'] = grouped['close'].pct_change()
+
+def compute_metrics(ohlcv_df, date_added):
+    """Point-in-time FE_METRICS + FE_METRICS_SIGNAL for every (slug, timestamp) row.
+
+    Each row equals what gcp_dmv_met.py writes when it runs the morning after that row's
+    candle (T = the row's timestamp, run date = T + 1 day), using only data up to T:
+      - ATH/ATL: running max/min, dated at the first time it was reached
+        (= gcp_dmv_met's idxmax over all history at run time)
+      - *_days: (run time - ath_date).days, which equals (T - ath_date).days because
+        every candle is stamped 23:59:59
+      - coin age: (T.date + 1 day) - date_added, as gcp_dmv_met's now().normalize()
+    The daily script drops coins with no date_added. Here they keep their rows, and their
+    first OHLCV date stands in for date_added. That's a lower bound on age, as
+    1K_coins_ohlcv often starts long after the CMC listing.
+    """
+    df = ohlcv_df[['id', 'slug', 'timestamp', 'high', 'low', 'close', 'market_cap']].copy()
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+    df = df.sort_values(['slug', 'timestamp']).reset_index(drop=True)
+    by_slug = df.groupby('slug', sort=False)
+    ts = df['timestamp'].dt.tz_localize(None)
+
+    df['m_pct_1d'] = by_slug['close'].pct_change()
     df['d_pct_cum_ret'] = (1 + df['m_pct_1d']).groupby(df['slug']).cumprod() - 1
 
-    # ATH / ATL
-    df['v_met_ath'] = grouped['high'].cummax()
-    df['v_met_atl'] = grouped['low'].cummin()
+    df['v_met_ath'] = by_slug['high'].cummax()
+    df['v_met_atl'] = by_slug['low'].cummin()
+    prev_ath = df.groupby('slug', sort=False)['v_met_ath'].shift()
+    prev_atl = df.groupby('slug', sort=False)['v_met_atl'].shift()
+    new_ath = df['high'].notna() & (prev_ath.isna() | (df['high'] > prev_ath))
+    new_atl = df['low'].notna() & (prev_atl.isna() | (df['low'] < prev_atl))
+    df['ath_date'] = ts.where(new_ath).groupby(df['slug']).ffill()
+    df['atl_date'] = ts.where(new_atl).groupby(df['slug']).ffill()
 
-    # ATH/ATL dates (same approach as gcp_dmv_met.py)
-    df.set_index('timestamp', inplace=True)
-    df['ath_date'] = df.groupby('slug')['high'].transform(lambda x: x.idxmax())
-    df['atl_date'] = df.groupby('slug')['low'].transform(lambda x: x.idxmin())
-    df.reset_index(inplace=True)
-
-    df['ath_date'] = pd.to_datetime(df['ath_date'])
-    df['atl_date'] = pd.to_datetime(df['atl_date'])
-
-    # Days since ATH/ATL
-    current_date = pd.Timestamp.now().tz_localize(None)
-    df['ath_date'] = df['ath_date'].dt.tz_localize(None)
-    df['atl_date'] = df['atl_date'].dt.tz_localize(None)
-    df['d_met_ath_days'] = (current_date - df['ath_date']).dt.days
-    df['d_met_atl_days'] = (current_date - df['atl_date']).dt.days
+    df['d_met_ath_days'] = (ts - df['ath_date']).dt.days
+    df['d_met_atl_days'] = (ts - df['atl_date']).dt.days
     df['d_met_ath_week'] = df['d_met_ath_days'] // 7
     df['d_met_ath_month'] = df['d_met_ath_days'] // 30
     df['d_met_atl_week'] = df['d_met_atl_days'] // 7
     df['d_met_atl_month'] = df['d_met_atl_days'] // 30
 
-    # Keep latest per slug (same as gcp_dmv_met.py line 154)
-    met_latest = df.loc[df.groupby('slug')['timestamp'].idxmax()].copy()
-    met_latest = pd.merge(
-        met_latest,
-        listings[['slug', 'date_added', 'last_updated']],
-        on='slug', how='inner'
-    )
+    first_seen = ts.groupby(df['slug']).transform('min')
+    df['date_added'] = df['slug'].map(date_added).fillna(first_seen)
+    run_date = ts.dt.normalize() + pd.Timedelta(days=1)
+    df['last_updated'] = run_date
+    df['d_met_coin_age_d'] = (run_date - df['date_added']).dt.days
+    df['d_met_coin_age_m'] = df['d_met_coin_age_d'] // 30
+    df['d_met_coin_age_y'] = df['d_met_coin_age_d'] // 365
 
-    met_latest['date_added'] = pd.to_datetime(met_latest['date_added'], errors='coerce').dt.tz_localize(None)
-    met_latest['last_updated'] = pd.to_datetime(met_latest['last_updated'], errors='coerce').dt.tz_localize(None)
-    met_latest = met_latest.dropna(subset=['date_added', 'last_updated'])
+    mc = df['market_cap']
+    df['m_cap_cat'] = np.select(
+        [mc >= 1e12, mc >= 1e11, mc >= 1e10, mc >= 1e9, mc >= 1e7],
+        ['1T-100B', '100B-10B', '10B-1B', '1B-100M', '100M-1M'], default='Under1M')
 
-    current_date = pd.Timestamp.now().normalize()
-    met_latest['d_met_coin_age_d'] = (current_date - met_latest['date_added']).dt.days
-    met_latest['d_met_coin_age_m'] = met_latest['d_met_coin_age_d'] // 30
-    met_latest['d_met_coin_age_y'] = met_latest['d_met_coin_age_d'] // 365
+    df['m_pct_1d_signal'] = np.where(df['m_pct_1d'] > 0, 1, -1)
+    df['d_pct_cum_ret_signal'] = np.where(df['d_pct_cum_ret'] > 0, 1, -1)
+    df['d_met_ath_month_signal'] = ((100 - df['d_met_ath_month']) * 2) / 100
+    df['d_market_cap_signal'] = df['m_cap_cat'].map(MARKET_CAP_SIGNAL)
+    age_y = df['d_met_coin_age_y']
+    df['d_met_coin_age_y_signal'] = np.where(age_y < 1, 0, np.where(age_y >= 1, 1 - (1 / age_y), 0))
 
-    def categorize_market_cap(mc):
-        if mc >= 1e12: return '1T-100B'
-        elif mc >= 1e11: return '100B-10B'
-        elif mc >= 1e10: return '10B-1B'
-        elif mc >= 1e9: return '1B-100M'
-        elif mc >= 1e7: return '100M-1M'
-        else: return 'Under1M'
+    # gcp_dmv_met.py loses `symbol` (its set_index) so it's NULL in both tables; leaving it
+    # out keeps it NULL, which also keeps core's neutral count identical to the daily.
+    return df.drop(columns=['high', 'low', 'close'])
 
-    met_latest['m_cap_cat'] = met_latest['market_cap'].apply(categorize_market_cap)
-    met_latest = met_latest.drop_duplicates(subset=['slug'], keep='first')
 
-    # Drop raw OHLCV columns by NAME (not position -- positional drops break
-    # when set_index/reset_index reorders columns)
-    ohlcv_drop_cols = ['name', 'open', 'high', 'low', 'close', 'volume']
-    metrics = met_latest.drop(columns=[c for c in ohlcv_drop_cols if c in met_latest.columns])
+def phase_metrics(ohlcv_df, engine_live, engine_bt):
+    logger.info("=" * 60)
+    logger.info("PHASE 7: Backfilling FE_METRICS + FE_METRICS_SIGNAL")
+    logger.info("=" * 60)
 
-    # Signals
-    metrics['m_pct_1d_signal'] = np.where(metrics['m_pct_1d'] > 0, 1, -1)
-    metrics['d_pct_cum_ret_signal'] = np.where(metrics['d_pct_cum_ret'] > 0, 1, -1)
-    metrics['d_met_ath_month_signal'] = ((100 - metrics['d_met_ath_month']) * 2) / 100
+    date_added = fetch_date_added(engine_live, engine_bt)
+    metrics = compute_metrics(ohlcv_df, date_added)
+    with_listing = metrics['slug'].isin(date_added).groupby(metrics['slug']).first()
+    logger.info(f"  {len(metrics):,} point-in-time rows for {metrics['slug'].nunique():,} coins; "
+                f"{int((~with_listing).sum()):,} coins have no CMC date_added "
+                f"(first OHLCV date used as a lower bound for coin age).")
 
-    market_cap_signal = {
-        '100M-1M': 0.25, '1B-100M': 0.4, 'Under1M': 0.1,
-        '10B-1B': 0.5, '1T-100B': 1, '100B-10B': 0.75
-    }
-    metrics['d_market_cap_signal'] = metrics['m_cap_cat'].map(market_cap_signal)
-    metrics['d_met_coin_age_y_signal'] = np.where(
-        metrics['d_met_coin_age_y'] < 1, 0,
-        np.where(metrics['d_met_coin_age_y'] >= 1,
-                 1 - (1 / metrics['d_met_coin_age_y']), 0)
-    )
-
-    # Select signal columns explicitly by name (not positional drop)
-    signal_cols = [c for c in metrics.columns if c in
-                   ['timestamp', 'id', 'symbol', 'slug',
-                    'm_pct_1d_signal', 'd_pct_cum_ret_signal',
-                    'd_met_ath_month_signal', 'd_market_cap_signal',
-                    'd_met_coin_age_y_signal']]
-    metrics_signal = metrics[signal_cols]
-
-    if DRY_RUN:
-        logger.info(f"  Would replace FE_METRICS ({len(metrics)} rows) and "
-                    f"FE_METRICS_SIGNAL ({len(metrics_signal)} rows) (dry run: nothing written).")
-        return
-
-    # Use replace for metrics (snapshot data, avoids schema mismatch with existing table)
-    logger.info(f"  Writing {len(metrics)} rows to FE_METRICS...")
-    num_cols = len(metrics.columns)
-    safe_chunk = max(1, 65000 // num_cols)
-    metrics.to_sql('FE_METRICS', con=engine_bt, if_exists='replace',
-                   index=False, method='multi', chunksize=safe_chunk)
-    logger.info(f"  FE_METRICS: {len(metrics)} rows written.")
-
-    logger.info(f"  Writing {len(metrics_signal)} rows to FE_METRICS_SIGNAL...")
-    num_cols = len(metrics_signal.columns)
-    safe_chunk = max(1, 65000 // num_cols)
-    metrics_signal.to_sql('FE_METRICS_SIGNAL', con=engine_bt, if_exists='replace',
-                          index=False, method='multi', chunksize=safe_chunk)
-    logger.info(f"  FE_METRICS_SIGNAL: {len(metrics_signal)} rows written.")
+    # The existing rows are the real daily snapshots: keep their values and only fill gaps
+    # (their signal columns are NULL, as gcp_dmv_met.py writes FE_METRICS before signals).
+    truncate_and_insert(metrics, "FE_METRICS", engine_bt, prefer_existing=True, guard=True)
+    truncate_and_insert(metrics, "FE_METRICS_SIGNAL", engine_bt, prefer_existing=True, guard=True)
     logger.info("  Metrics backfill complete.")
 
 
 # ============================================================
 # PHASE 8: CORE (DMV_ALL + DMV_SCORES from signal tables)
 # ============================================================
-def phase_core(engine_bt):
+# Same tables and join order as gcp_dmv_core.py: the order fixes the column order,
+# and the daily's bullish/bearish/neutral counts skip the first 4 columns by position.
+CORE_SIGNAL_TABLES = [
+    "FE_OSCILLATORS_SIGNALS", "FE_MOMENTUM_SIGNALS", "FE_METRICS_SIGNAL", "FE_TVV_SIGNALS",
+    "FE_RATIOS_SIGNALS", "FE_CANDLESTICK_SIGNALS", "FE_DOW_PATTERNS", "FE_PRICE_LEVELS",
+]
+
+
+def _core_join_chunk(engine_bt, tables, start, end, slugs=None):
+    """FULL OUTER JOIN of the signal tables USING (slug, timestamp) for one time window."""
+    where = '"timestamp" >= :a AND "timestamp" < :b' + (' AND slug IN :slugs' if slugs else '')
+    parts = [f'(SELECT * FROM "{t}" WHERE {where}) AS t{i}' for i, t in enumerate(tables)]
+    query = text("SELECT * FROM " + " FULL OUTER JOIN ".join(
+        p if i == 0 else f"{p} USING (slug, timestamp)" for i, p in enumerate(parts)))
+    params = {"a": start, "b": end}
+    if slugs:
+        query = query.bindparams(bindparam("slugs", expanding=True))
+        params["slugs"] = list(slugs)
+    with engine_bt.connect() as conn:
+        return pd.read_sql_query(query, conn, params=params)
+
+
+def compute_core(engine_bt, slugs=None, since=None):
+    """FE_DMV_ALL + FE_DMV_SCORES for every (slug, timestamp) any signal table has.
+
+    Mirrors gcp_dmv_core.py: FULL OUTER JOIN, drop duplicate columns, fillna(0) (a pillar
+    with no row for that key counts as 0), bullish/bearish/neutral = how many of
+    columns[4:] equal 1/-1/0 (counted before the 3 new zero columns get values, so
+    neutral includes them), then keep FE_DMV_ALL's columns and score each pillar as
+    mean(d_/m_/v_ columns) * 100.
+    """
+    tables = [t for t in CORE_SIGNAL_TABLES if table_columns(engine_bt, t)]
+    absent = [t for t in CORE_SIGNAL_TABLES if t not in tables]
+    if absent:
+        logger.warning(f"  Signal tables missing from cp_backtest, treated as all-0: {absent}")
+    dmv_cols = table_columns(engine_bt, "FE_DMV_ALL")
+
+    first_year = 2013 if since is None else pd.Timestamp(since).year
+    edges = [pd.Timestamp(f"{y}-01-01", tz="UTC") for y in range(first_year, pd.Timestamp.now().year + 2)]
+    if since is not None:
+        edges[0] = pd.Timestamp(since, tz="UTC")
+    all_rows, all_scores = [], []
+    for start, end in zip(edges[:-1], edges[1:]):
+        df = _core_join_chunk(engine_bt, tables, start, end, slugs)
+        if df.empty:
+            continue
+        # cp_backtest's FE_METRICS_SIGNAL has a legacy, always-NULL `symbol` that dbcp's copy
+        # (which the daily joins) lacks; as a 0 it would add one to every neutral count.
+        df = (df.loc[:, ~df.columns.duplicated()]
+                .drop(columns=['symbol'], errors='ignore')
+                .dropna(subset=['slug', 'timestamp'])
+                .fillna(0))
+        for col in ['bullish', 'bearish', 'neutral']:
+            df[col] = 0
+        counted = df.iloc[:, 4:].copy()
+        bull, bear, neut = counted.eq(1).sum(axis=1), counted.eq(-1).sum(axis=1), counted.eq(0).sum(axis=1)
+        df['bullish'], df['bearish'], df['neutral'] = bull, bear, neut
+        if dmv_cols:
+            df = df[[c for c in df.columns if c in dmv_cols]]
+
+        pillars = {}
+        for name, prefix in [('Durability_Score', 'd_'), ('Momentum_Score', 'm_'), ('Valuation_Score', 'v_')]:
+            pcols = [c for c in df.columns if c.startswith(prefix)]
+            pillars[name] = df[pcols].sum(axis=1) / max(len(pcols), 1) * 100
+        all_scores.append(pd.DataFrame({'slug': df['slug'], 'timestamp': df['timestamp'], **pillars}))
+        all_rows.append(df)
+        logger.info(f"  {start.date()}..{end.date()}: {len(df):,} rows")
+
+    if not all_rows:
+        return pd.DataFrame(), pd.DataFrame()
+    return pd.concat(all_rows, ignore_index=True), pd.concat(all_scores, ignore_index=True)
+
+
+def phase_core(engine_bt, slugs=None):
     logger.info("=" * 60)
     logger.info("PHASE 8: Backfilling FE_DMV_ALL + FE_DMV_SCORES")
     logger.info("=" * 60)
 
-    # Join ALL signal tables from cp_backtest (now populated with history)
-    query = """
-    SELECT *
-    FROM "FE_OSCILLATORS_SIGNALS" AS o
-    FULL OUTER JOIN "FE_MOMENTUM_SIGNALS" AS m USING (slug, timestamp)
-    FULL OUTER JOIN "FE_METRICS_SIGNAL" AS me USING (slug, timestamp)
-    FULL OUTER JOIN "FE_TVV_SIGNALS" AS t USING (slug, timestamp)
-    FULL OUTER JOIN "FE_RATIOS_SIGNALS" AS r USING (slug, timestamp)
-    """
-
-    logger.info("  Joining signal tables from cp_backtest...")
-    df = pd.read_sql_query(query, engine_bt)
-
+    df, dmv_scores = compute_core(engine_bt, slugs)
     if df.empty:
         logger.warning("  No signal data found. Skipping core.")
         return
-
-    # Dedup columns, filter rows, fill NaN
-    df = (
-        df.loc[:, ~df.columns.duplicated()]
-          .pipe(lambda d: d[d['slug'].eq('bitcoin') | d.drop(columns='slug').notna().all(axis=1)])
-          .fillna(0)
-    )
-
-    # Count bullish/bearish/neutral per row
-    for col in ['bullish', 'bearish', 'neutral']:
-        df[col] = 0
-
-    signal_cols = df.iloc[:, 4:]  # Skip slug, timestamp, id, name
-    for index, row in signal_cols.iterrows():
-        df.at[index, 'bullish'] = (row == 1).sum()
-        df.at[index, 'bearish'] = (row == -1).sum()
-        df.at[index, 'neutral'] = (row == 0).sum()
-
-    # DMV Scores
-    d_cols = [c for c in df.columns if c.startswith('d_')]
-    m_cols = [c for c in df.columns if c.startswith('m_')]
-    v_cols = [c for c in df.columns if c.startswith('v_')]
-
-    durability = df[['slug'] + d_cols]
-    momentum = df[['slug'] + m_cols]
-    valuation = df[['slug'] + v_cols]
-
-    d_score = durability.drop('slug', axis=1).sum(axis=1) / max(durability.shape[1] - 1, 1) * 100
-    m_score = momentum.drop('slug', axis=1).sum(axis=1) / max(momentum.shape[1] - 1, 1) * 100
-    v_score = valuation.drop('slug', axis=1).sum(axis=1) / max(valuation.shape[1] - 1, 1) * 100
-
-    dmv_scores = pd.DataFrame({
-        'slug': df['slug'],
-        'timestamp': df['timestamp'],
-        'Durability_Score': d_score,
-        'Momentum_Score': m_score,
-        'Valuation_Score': v_score
-    })
+    logger.info(f"  {len(df):,} rows for {df['slug'].nunique():,} coins over "
+                f"{df['timestamp'].nunique():,} dates.")
 
     # FE_DMV_ALL and FE_DMV_SCORES may not exist yet in cp_backtest
     # Use if_exists='replace' for first creation, then backfill handles future runs.
     # Only on LookupError (table missing): any other write error has already rolled
     # back, and replacing the table then would throw its rows away.
     try:
-        truncate_and_insert(df, "FE_DMV_ALL", engine_bt)
+        truncate_and_insert(df, "FE_DMV_ALL", engine_bt, guard=True)
     except LookupError:
         logger.info("  FE_DMV_ALL does not exist yet, creating...")
         num_cols = len(df.columns)
@@ -632,7 +690,7 @@ def phase_core(engine_bt):
         logger.info(f"  FE_DMV_ALL created with {len(df)} rows.")
 
     try:
-        truncate_and_insert(dmv_scores, "FE_DMV_SCORES", engine_bt)
+        truncate_and_insert(dmv_scores, "FE_DMV_SCORES", engine_bt, guard=True)
     except LookupError:
         logger.info("  FE_DMV_SCORES does not exist yet, creating...")
         num_cols = len(dmv_scores.columns)
@@ -649,9 +707,12 @@ def phase_core(engine_bt):
 ALL_PHASES = ["momentum", "oscillators", "tvv", "pct", "ratios", "metrics", "core"]
 # Run only when named in --only:
 #   ratios  - loops every date x coin; ~48 h for all ~3,660 coins (needs vectorising)
-#   metrics - replaces the daily FE_METRICS snapshot history with a single current snapshot
-#   core    - rebuilds FE_DMV_ALL from the inner join of all signal tables, which today
-#             covers ~5.7k rows vs ~156k in the table (FE_METRICS_SIGNAL has only ~178 dates)
+#   metrics - point-in-time history for every coin; keeps the existing daily snapshot rows
+#             and values (prefer_existing) and refuses to drop keys (shrink guard). Opt-in
+#             because it rewrites FE_METRICS(+_SIGNAL), ~2.7M rows, and core reads it.
+#   core    - FULL OUTER JOIN of the signal tables like gcp_dmv_core.py, guarded against
+#             shrinking. Opt-in because it rewrites ~2.7M rows and its scores depend on
+#             ratios/metrics/candlestick/Dow/levels, so run it after those are current.
 OPT_IN_PHASES = ["ratios", "metrics", "core"]
 DEFAULT_PHASES = [p for p in ALL_PHASES if p not in OPT_IN_PHASES]
 
@@ -671,8 +732,14 @@ if __name__ == "__main__":
         "--slugs", type=str, default=None,
         help="Comma-separated slugs to limit the OHLCV fetch to (for testing; use with --dry-run)."
     )
+    parser.add_argument(
+        "--allow-shrink", action="store_true",
+        help="Let metrics/core rewrites drop existing (slug, timestamp) keys or >5%% of rows "
+             "(refused by default)."
+    )
     args = parser.parse_args()
     DRY_RUN = args.dry_run
+    ALLOW_SHRINK = args.allow_shrink
     slugs = [s.strip() for s in args.slugs.split(",")] if args.slugs else None
     if slugs and not DRY_RUN:
         print("--slugs would TRUNCATE each table down to just those coins; use it with --dry-run.")
@@ -700,7 +767,7 @@ if __name__ == "__main__":
     phase_diagnose(engine_bt)
 
     # Fetch OHLCV if any OHLCV-based phase is selected
-    ohlcv_phases = {"momentum", "oscillators", "tvv", "pct", "ratios"}
+    ohlcv_phases = {"momentum", "oscillators", "tvv", "pct", "ratios", "metrics"}
     if ohlcv_phases & set(selected):
         ohlcv_df = fetch_all_ohlcv(engine_live, slugs)
     else:
@@ -717,9 +784,9 @@ if __name__ == "__main__":
     if "ratios" in selected:
         phase_ratios(ohlcv_df, engine_bt)
     if "metrics" in selected:
-        phase_metrics(engine_live, engine_bt)
+        phase_metrics(ohlcv_df, engine_live, engine_bt)
     if "core" in selected:
-        phase_core(engine_bt)
+        phase_core(engine_bt, slugs)
 
     # Final diagnosis
     logger.info("")
