@@ -337,6 +337,172 @@ def phase_pct(ohlcv_df, engine_bt):
 # ============================================================
 # PHASE 6: RATIOS (rolling 28-day window per unique date)
 # ============================================================
+RATIO_WINDOW_DAYS = 28   # window = [target_date - 28 days, target_date]
+RATIO_MIN_DATES = 5      # skip a target date whose window has fewer unique dates
+RATIO_MIN_ROWS = 3       # skip a slug with fewer rows than this in the window
+RATIO_BENCHMARK = "bitcoin"
+
+
+def _masked_mean(x, mask):
+    """Row-wise mean over cells where mask is True, like pandas Series.mean() (skipna).
+    NaN when a row has no cells; inf propagates the same way pandas' sum does."""
+    n = mask.sum(axis=1)
+    return np.where(mask, x, 0.0).sum(axis=1) / n
+
+
+def _masked_var(x, mask):
+    """Row-wise variance (ddof=1) over cells where mask is True, two-pass like pandas
+    nanvar. NaN when a row has fewer than 2 cells."""
+    n = mask.sum(axis=1)
+    m = np.where(mask, x, 0.0).sum(axis=1) / n
+    sq = np.where(mask, (x - m[:, None]) ** 2, 0.0).sum(axis=1)
+    var = sq / (n - 1)
+    var[n < 2] = np.nan
+    return var
+
+
+def _masked_std(x, mask):
+    return np.sqrt(_masked_var(x, mask))
+
+
+def _masked_cov(a, b, mask):
+    """Row-wise covariance (ddof=1) of a and b over mask, like Series.cov (np.cov on the
+    valid pairs). NaN when a row has fewer than 2 pairs."""
+    n = mask.sum(axis=1)
+    am = np.where(mask, a, 0.0).sum(axis=1) / n
+    bm = np.where(mask, b, 0.0).sum(axis=1) / n
+    c = np.where(mask, (a - am[:, None]) * (b - bm[:, None]), 0.0).sum(axis=1) / (n - 1)
+    c[n < 2] = np.nan
+    return c
+
+
+def compute_ratios_vectorised(df):
+    """FE_RATIOS rows for every (target date, slug), from df that already has m_pct_1d.
+
+    Same semantics as the per-date/per-slug loop over gcp_dmv_rat's calculate_* functions
+    (window, skips, bitcoin benchmark ffill-aligned to each slug's dates, skipna/ddof rules),
+    but each target date is one vectorised step over a dense slug x date matrix instead of
+    a pandas groupby per slug. Returns None if nothing qualifies.
+    """
+    df = df[['slug', 'name', 'timestamp', 'm_pct_1d']]
+    dups = df.duplicated(['slug', 'timestamp'], keep='last')
+    if dups.any():
+        logger.warning(f"  {int(dups.sum())} duplicate (slug, timestamp) rows; keeping the last of each.")
+        df = df[~dups]
+
+    slugs = pd.Index(sorted(df['slug'].unique()))          # groupby('slug') order
+    dates = pd.DatetimeIndex(df['timestamp'].unique()).sort_values()
+    if RATIO_BENCHMARK not in slugs:
+        return None
+    S, D = len(slugs), len(dates)
+    si = slugs.get_indexer(df['slug'])
+    di = dates.get_indexer(df['timestamp'])
+
+    R = np.full((S, D), np.nan)              # m_pct_1d; NaN = no row or NaN return
+    R[si, di] = df['m_pct_1d'].to_numpy(dtype=float)
+    P = np.zeros((S, D), dtype=bool)         # a row exists for (slug, date)
+    P[si, di] = True
+    row_of = np.full((S, D), -1, dtype=np.int64)
+    row_of[si, di] = np.arange(len(df))
+    names = df['name'].to_numpy()
+    btc = slugs.get_loc(RATIO_BENCHMARK)
+    starts = dates.searchsorted(dates - pd.Timedelta(days=RATIO_WINDOW_DAYS), side='left')
+
+    out = {k: [] for k in ['m_rat_alpha', 'm_rat_omega', 'v_rat_sharpe', 'v_rat_sortino',
+                           'v_rat_teynor', 'v_rat_common_sense', 'v_rat_information',
+                           'v_rat_win_loss', 'm_rat_win_rate', 'm_rat_ror', 'd_rat_pain',
+                           'd_rat_beta', 'slug_i', 'date_i', 'row_i']}
+    processed = 0
+    with np.errstate(all='ignore'):
+        for e in range(D):
+            s = starts[e]
+            W = e - s + 1
+            if W < RATIO_MIN_DATES:
+                continue                     # window has < 5 unique dates
+            pb, rb = P[btc, s:e + 1], R[btc, s:e + 1]
+            if not pb.any():
+                continue                     # no benchmark rows in the window
+            bvalid = (pb & ~np.isnan(rb))[None, :]
+            b_mean = _masked_mean(rb[None, :], bvalid)[0]
+            b_var = _masked_var(rb[None, :], bvalid)[0]
+            # Benchmark reindexed to each date with ffill over the window's bitcoin rows
+            last = np.maximum.accumulate(np.where(pb, np.arange(W), -1))
+            ab = np.where(last >= 0, rb[np.clip(last, 0, None)], np.nan)[None, :]
+
+            pw = P[:, s:e + 1]
+            nrows = pw.sum(axis=1)
+            elig = nrows >= RATIO_MIN_ROWS
+            elig[btc] = False
+            ii = np.flatnonzero(elig)
+            processed += 1
+            if processed % 500 == 0:
+                logger.info(f"  Processed {processed}/{D} dates...")
+            if not len(ii):
+                continue
+            r = R[ii, s:e + 1]
+            n = nrows[ii]
+            valid = ~np.isnan(r)
+
+            mean_r = _masked_mean(r, valid)
+            std_r = _masked_std(r, valid)
+            beta = _masked_cov(r, np.broadcast_to(ab, r.shape), valid & ~np.isnan(ab))
+            beta = beta / b_var if b_var != 0 else np.full(len(ii), np.nan)
+
+            ex = r - ab                                  # excess / active returns
+            gm, lm = ex > 0, ex < 0
+            avg_gain = _masked_mean(ex, gm)
+            avg_loss = np.abs(_masked_mean(ex, lm))
+            omega = np.where(avg_loss != 0, avg_gain / avg_loss, np.inf)
+
+            sharpe = np.where(std_r != 0, mean_r / std_r, np.nan)
+            down_std = _masked_std(r, valid & (r < 0))
+            sortino = np.where(down_std != 0, mean_r / down_std, np.nan)
+            treynor = np.where(np.isnan(beta) | (beta == 0), np.nan, mean_r / beta)
+
+            cum = np.nancumprod(1 + np.where(valid, r, np.nan), axis=1)
+            cum[~valid] = np.nan
+            peak = np.fmax.accumulate(cum, axis=1)
+            dd = (cum - peak) / peak
+            dd_ok = ~np.isnan(dd)
+            max_dd = np.where(dd_ok.any(axis=1), np.where(dd_ok, dd, np.inf).min(axis=1), np.nan)
+            common_sense = np.where(max_dd != 0, mean_r / np.abs(max_dd), np.nan)
+
+            act_ok = ~np.isnan(ex)
+            te = _masked_std(ex, act_ok)
+            information = np.where(te != 0, _masked_mean(ex, act_ok) / te, np.nan)
+
+            wins = (r > 0).sum(axis=1)
+            losses = (r < 0).sum(axis=1)
+            win_loss = np.where(losses != 0, wins / losses, np.inf)
+            win_rate = wins / n
+            bad_wr = np.isnan(win_rate) | (win_rate == 0) | (win_rate == np.inf)
+            ror = np.where(bad_wr, np.nan, ((1 - win_rate) / win_rate) ** n)
+            gain = np.where(r > 0, r, 0.0).sum(axis=1)
+            pain = np.where(r < 0, np.abs(r), 0.0).sum(axis=1)
+            gain_to_pain = np.where(pain != 0, gain / pain, np.nan)
+
+            first = pw[ii].argmax(axis=1)                # name of the slug's first row in window
+            for k, v in [('m_rat_alpha', mean_r - b_mean), ('m_rat_omega', omega),
+                         ('v_rat_sharpe', sharpe), ('v_rat_sortino', sortino),
+                         ('v_rat_teynor', treynor), ('v_rat_common_sense', common_sense),
+                         ('v_rat_information', information), ('v_rat_win_loss', win_loss),
+                         ('m_rat_win_rate', win_rate), ('m_rat_ror', ror),
+                         ('d_rat_pain', gain_to_pain), ('d_rat_beta', beta),
+                         ('slug_i', ii), ('date_i', np.full(len(ii), e)),
+                         ('row_i', row_of[ii, s + first])]:
+                out[k].append(v)
+
+    if not out['slug_i']:
+        return None
+    cols = {k: np.concatenate(v) for k, v in out.items()}
+    ratios_df = pd.DataFrame({k: cols[k] for k in list(out)[:11]})
+    ratios_df['slug'] = slugs.take(cols['slug_i'])
+    ratios_df['name'] = names[cols['row_i']]
+    ratios_df['timestamp'] = dates.take(cols['date_i'])
+    ratios_df['d_rat_beta'] = cols['d_rat_beta']
+    return ratios_df
+
+
 def phase_ratios(ohlcv_df, engine_bt):
     logger.info("=" * 60)
     logger.info("PHASE 6: Backfilling FE_RATIOS + FE_RATIOS_SIGNALS")
@@ -344,84 +510,17 @@ def phase_ratios(ohlcv_df, engine_bt):
 
     from gcp_dmv_rat import (
         calculate_pct_change as rat_pct_change,
-        calculate_benchmark_returns, calculate_alpha, calculate_beta,
-        calculate_omega_ratio, calculate_sharpe_ratio, calculate_sortino_ratio,
-        calculate_treynor_ratio, calculate_common_sense_ratio,
-        calculate_information_ratio, calculate_winloss_ratio,
-        calculate_win_rate, calculate_risk_of_ruin, calculate_gain_to_pain,
         generate_binary_signals_ratios
     )
 
-    df = ohlcv_df.copy()
-    df = rat_pct_change(df)
-
-    # Get all unique dates, sorted
-    all_dates = sorted(df['timestamp'].unique())
-    logger.info(f"  {len(all_dates)} unique dates in OHLCV data.")
-
-    # Process in rolling 28-day windows, stepping by 1 day
-    all_ratios = []
-    processed = 0
-
-    for target_date in all_dates:
-        window_start = target_date - pd.Timedelta(days=28)
-        window = df[(df['timestamp'] >= window_start) & (df['timestamp'] <= target_date)].copy()
-
-        if window['timestamp'].nunique() < 5:
-            continue  # Need at least 5 days for meaningful ratios
-
-        benchmark_returns = calculate_benchmark_returns(window)
-        if benchmark_returns.empty:
-            continue
-        benchmark_avg_return = benchmark_returns.mean()
-
-        # Calculate beta for all slugs
-        beta_values = {}
-        for slug, group in window.groupby('slug'):
-            if slug != 'bitcoin' and len(group) >= 3:
-                beta_series = calculate_beta(group, benchmark_returns)
-                beta_values[slug] = beta_series['d_rat_beta']
-
-        # Calculate all ratios per slug
-        for slug, group in window.groupby('slug'):
-            if slug == 'bitcoin' or len(group) < 3:
-                continue
-            if slug not in beta_values:
-                continue
-
-            try:
-                combined = pd.concat([
-                    calculate_alpha(group, benchmark_avg_return),
-                    calculate_omega_ratio(group, benchmark_returns),
-                    calculate_sharpe_ratio(group),
-                    calculate_sortino_ratio(group),
-                    calculate_treynor_ratio(group, beta_values),
-                    calculate_common_sense_ratio(group),
-                    calculate_information_ratio(group, benchmark_returns),
-                    calculate_winloss_ratio(group),
-                    calculate_win_rate(group),
-                    calculate_risk_of_ruin(group),
-                    calculate_gain_to_pain(group),
-                ])
-                row = pd.DataFrame(combined).transpose()
-                row['slug'] = slug
-                row['name'] = group['name'].iloc[0]
-                row['timestamp'] = target_date
-                row['d_rat_beta'] = beta_values[slug]
-                all_ratios.append(row)
-            except Exception:
-                continue
-
-        processed += 1
-        if processed % 100 == 0:
-            logger.info(f"  Processed {processed}/{len(all_dates)} dates, "
-                        f"{len(all_ratios)} ratio rows so far...")
-
-    if not all_ratios:
+    df = rat_pct_change(ohlcv_df.copy())
+    logger.info(f"  {df['timestamp'].nunique()} unique dates in OHLCV data.")
+    start = time.time()
+    ratios_df = compute_ratios_vectorised(df)
+    if ratios_df is None or ratios_df.empty:
         logger.warning("  No ratio data computed. Skipping.")
         return
-
-    ratios_df = pd.concat(all_ratios, ignore_index=True)
+    logger.info(f"  {len(ratios_df)} ratio rows computed in {(time.time() - start) / 60:.1f} minutes.")
     ratios_df = generate_binary_signals_ratios(ratios_df)
 
     truncate_and_insert(ratios_df, "FE_RATIOS", engine_bt)
@@ -648,7 +747,8 @@ def phase_core(engine_bt):
 # ============================================================
 ALL_PHASES = ["momentum", "oscillators", "tvv", "pct", "ratios", "metrics", "core"]
 # Run only when named in --only:
-#   ratios  - loops every date x coin; ~48 h for all ~3,660 coins (needs vectorising)
+#   ratios  - rewrites FE_RATIOS(+_SIGNALS) for all coins: ~0.5 min compute (vectorised),
+#             then ~1 h of inserts for ~2.75M rows per table on the crypto VM
 #   metrics - replaces the daily FE_METRICS snapshot history with a single current snapshot
 #   core    - rebuilds FE_DMV_ALL from the inner join of all signal tables, which today
 #             covers ~5.7k rows vs ~156k in the table (FE_METRICS_SIGNAL has only ~178 dates)
