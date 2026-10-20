@@ -1,8 +1,9 @@
 name: Claude Code Review
 
+# Disabled on PRs (2026-10-20): the ANTHROPIC_API_KEY secret is rejected, so every PR got a red check.
+# Restore the pull_request trigger once a working key or CLAUDE_CODE_OAUTH_TOKEN is set.
 on:
-  pull_request:
-    types: [opened, synchronize]
+  workflow_dispatch:
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
