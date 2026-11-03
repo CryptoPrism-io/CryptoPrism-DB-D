@@ -31,6 +31,7 @@ import sys
 import time
 import logging
 import argparse
+import resource
 import numpy as np
 import pandas as pd
 from sqlalchemy import bindparam, create_engine, text
@@ -145,10 +146,16 @@ def _guard_no_shrink(conn, out, table_name):
         return
     old_keys = pd.MultiIndex.from_arrays([old["slug"], _ts_key(old["timestamp"])])
     new_keys = pd.MultiIndex.from_arrays([out["slug"], _ts_key(out["timestamp"])])
-    lost = int((~old_keys.isin(new_keys)).sum())
-    msg = (f"{table_name}: {len(out):,} rows vs {len(old):,} now, "
+    _apply_guard(table_name, len(out), len(old), int((~old_keys.isin(new_keys)).sum()))
+
+
+def _apply_guard(table_name, new_rows, old_rows, lost):
+    """The shrink guard's decision, given the row counts and the number of lost keys."""
+    if old_rows == 0:
+        return
+    msg = (f"{table_name}: {new_rows:,} rows vs {old_rows:,} now, "
            f"{lost:,} existing (slug, timestamp) keys would be dropped")
-    if lost == 0 and len(out) >= SHRINK_MIN_ROWS * len(old):
+    if lost == 0 and new_rows >= SHRINK_MIN_ROWS * old_rows:
         logger.info(f"  Shrink guard OK: {msg}")
     elif ALLOW_SHRINK:
         logger.warning(f"  Shrink guard overridden by --allow-shrink: {msg}")
@@ -208,6 +215,190 @@ def truncate_and_insert(df, table_name, engine, prefer_existing=False, guard=Fal
     except Exception as e:
         logger.error(f"  Error writing {table_name} (rolled back, old rows kept): {e}")
         raise
+
+
+# Coins per batch in the batched phases (ratios, metrics); set by --batch-size.
+BATCH_SLUGS = 250
+
+
+def _batches(items, size=None):
+    size = size or BATCH_SLUGS
+    return [items[i:i + size] for i in range(0, len(items), size)]
+
+
+def _quoted(cols, alias=None):
+    prefix = f"{alias}." if alias else ""
+    return ", ".join(f'{prefix}"{c}"' for c in cols)
+
+
+class StagedTable:
+    """Rewrites a table batch by batch, so peak memory is one batch instead of the table.
+
+    add() appends each batch to an UNLOGGED staging copy, "_stg_<table>". finish() then
+    does in SQL, in ONE transaction, what truncate_and_insert does in pandas: keep the
+    existing values of columns the backfill doesn't compute, optionally keep the table's
+    existing rows and values (prefer_existing), apply the shrink guard, then TRUNCATE the
+    table and INSERT it from the staging copy. If that fails the table keeps its old rows.
+    The staging copy is dropped after finish(); one left by a crashed run is dropped by
+    the next run.
+
+    In a dry run nothing is created: each batch is compared, read-only, with the table's
+    rows in that batch's scope (its slugs or time window) to report what finish() would do.
+    """
+
+    def __init__(self, engine, table_name, prefer_existing=False, guard=False):
+        self.engine, self.table, self.stg = engine, table_name, f"_stg_{table_name}"
+        self.prefer_existing, self.guard = prefer_existing, guard
+        self.cols = table_columns(engine, table_name)
+        self.computed = set()
+        self.rows = 0
+        # Dry-run tallies over the scopes seen so far
+        self.seen_old = self.overlap = self.unmatched_old = 0
+        if not self.cols:
+            if DRY_RUN:
+                logger.warning(f"  {table_name} does not exist; would be created (dry run).")
+                return
+            raise LookupError(f"{table_name} does not exist")
+        if not DRY_RUN:
+            with engine.begin() as conn:
+                conn.execute(text(f'DROP TABLE IF EXISTS "{self.stg}"'))
+                conn.execute(text(f'CREATE UNLOGGED TABLE "{self.stg}" (LIKE "{table_name}" INCLUDING DEFAULTS)'))
+
+    def add(self, df, scope):
+        """Append one batch. scope = {"slugs": [...]} or {"start": a, "end": b}: the table
+        rows this batch replaces, which the dry run compares it with."""
+        if not self.cols or df.empty:
+            return
+        present = [c for c in self.cols if c in df.columns]
+        self.computed.update(present)
+        out = df[present].replace([np.inf, -np.inf], np.nan)
+        self.rows += len(out)
+        if DRY_RUN:
+            self._dry_compare(out, scope)
+            return
+        # pg8000 limit: 65535 params per batch
+        safe_chunk = max(1, 65000 // len(present))
+        with self.engine.begin() as conn:
+            out.to_sql(self.stg, con=conn, if_exists='append',
+                       index=False, method='multi', chunksize=safe_chunk)
+
+    def _dry_compare(self, out, scope):
+        if "slugs" in scope:
+            q = text(f'SELECT "slug", "timestamp" FROM "{self.table}" WHERE "slug" IN :slugs'
+                     ).bindparams(bindparam("slugs", expanding=True))
+            params = {"slugs": list(scope["slugs"])}
+        else:
+            q = text(f'SELECT "slug", "timestamp" FROM "{self.table}" '
+                     f'WHERE "timestamp" >= :a AND "timestamp" < :b')
+            params = {"a": scope["start"], "b": scope["end"]}
+        with self.engine.connect() as conn:
+            old = pd.read_sql_query(q, conn, params=params)
+        if old.empty:
+            return
+        old_keys = pd.MultiIndex.from_arrays([old["slug"], _ts_key(old["timestamp"])])
+        new_keys = pd.MultiIndex.from_arrays([out["slug"], _ts_key(out["timestamp"])])
+        hit = old_keys.isin(new_keys)
+        self.seen_old += len(old)
+        self.overlap += int(hit.sum())
+        self.unmatched_old += int((~hit).sum())
+
+    def _not_computed(self, conn):
+        """Columns no batch computed, split into those with data (kept) and empty ones."""
+        missing = [c for c in self.cols if c not in self.computed]
+        keep = [c for c in missing
+                if conn.execute(text(f'SELECT COUNT("{c}") FROM "{self.table}"')).scalar()]
+        if keep:
+            logger.info(f"  {self.table}: keeping existing values of {len(keep)} column(s) "
+                        f"the backfill doesn't compute: {keep}")
+        still_null = [c for c in missing if c not in keep]
+        if still_null:
+            logger.warning(f"  {self.table}: {len(still_null)} column(s) not computed and "
+                           f"currently empty, will stay NULL: {still_null}")
+        return keep
+
+    def finish(self):
+        if not self.cols:
+            return
+        if DRY_RUN:
+            self._dry_finish()
+            return
+        try:
+            self._swap()
+        except Exception as e:
+            logger.error(f"  Error writing {self.table} (rolled back, old rows kept): {e}")
+            raise
+        finally:
+            self.drop()
+
+    def drop(self):
+        """Drop the staging copy without touching the table."""
+        if self.cols and not DRY_RUN:
+            with self.engine.begin() as conn:
+                conn.execute(text(f'DROP TABLE IF EXISTS "{self.stg}"'))
+
+    def _dry_finish(self):
+        with self.engine.connect() as conn:
+            old_rows = conn.execute(text(f'SELECT COUNT(*) FROM "{self.table}"')).scalar()
+            self._not_computed(conn)
+        # Rows outside every batch's scope aren't recomputed either
+        unmatched = self.unmatched_old + (old_rows - self.seen_old)
+        if self.prefer_existing:
+            logger.info(f"  {self.table}: would keep existing values for {self.overlap:,} "
+                        f"(slug, timestamp) keys already in the table; computed rows fill the rest.")
+            new_rows, lost = self.rows + unmatched, 0
+        else:
+            new_rows, lost = self.rows, unmatched
+        if self.guard:
+            _apply_guard(self.table, new_rows, old_rows, lost)
+        logger.info(f"  Writing {new_rows} rows x {len(self.computed)} computed columns to "
+                    f"{self.table} (dry run: nothing written)...")
+
+    def _swap(self):
+        t, s = self.table, self.stg
+        key = 's."slug" = t."slug" AND s."timestamp" = t."timestamp"'
+        not_in_stg = f'NOT EXISTS (SELECT 1 FROM "{s}" AS s WHERE {key})'
+        with self.engine.begin() as conn:
+            conn.execute(text(f'CREATE INDEX ON "{s}" ("slug", "timestamp")'))
+            conn.execute(text(f'ANALYZE "{s}"'))
+            keep = self._not_computed(conn)
+            sets = [f'"{c}" = t."{c}"' for c in keep]
+            if self.prefer_existing:
+                sets += [f'"{c}" = COALESCE(t."{c}", s."{c}")' for c in self.cols
+                         if c in self.computed and c not in ("slug", "timestamp")]
+            if sets:
+                overlap = conn.execute(text(
+                    f'UPDATE "{s}" AS s SET {", ".join(sets)} FROM "{t}" AS t WHERE {key}')).rowcount
+            if self.prefer_existing:
+                added = conn.execute(text(
+                    f'INSERT INTO "{s}" ({_quoted(self.cols)}) '
+                    f'SELECT {_quoted(self.cols, "t")} FROM "{t}" AS t WHERE {not_in_stg}')).rowcount
+                logger.info(f"  {t}: kept existing values for {overlap:,} (slug, timestamp) keys "
+                            f"already in the table and {added:,} existing rows the backfill "
+                            f"didn't compute; computed rows fill the rest.")
+            new_rows = conn.execute(text(f'SELECT COUNT(*) FROM "{s}"')).scalar()
+            if self.guard:
+                old_rows = conn.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
+                lost = conn.execute(text(f'SELECT COUNT(*) FROM "{t}" AS t WHERE {not_in_stg}')).scalar()
+                _apply_guard(t, new_rows, old_rows, lost)
+            logger.info(f"  Writing {new_rows} rows x {len(self.cols)} columns to {t} from {s}...")
+            conn.execute(text(f'TRUNCATE TABLE "{t}"'))
+            conn.execute(text(f'INSERT INTO "{t}" ({_quoted(self.cols)}) SELECT {_quoted(self.cols)} FROM "{s}"'))
+        logger.info(f"  {t}: {new_rows} rows written.")
+
+
+def fetch_slugs(engine, slugs=None):
+    """Every slug in 1K_coins_ohlcv (or `slugs`), sorted."""
+    if slugs:
+        return sorted(slugs)
+    with engine.connect() as conn:
+        return [r[0] for r in conn.execute(text('SELECT DISTINCT "slug" FROM "1K_coins_ohlcv" ORDER BY 1'))]
+
+
+def fetch_ohlcv_dates(engine):
+    """Every distinct timestamp in 1K_coins_ohlcv, sorted, typed as fetch_all_ohlcv types them."""
+    with engine.connect() as conn:
+        ts = pd.read_sql_query(text('SELECT DISTINCT "timestamp" FROM "1K_coins_ohlcv"'), conn)['timestamp']
+    return pd.DatetimeIndex(pd.to_datetime(ts)).sort_values()
 
 
 def fetch_all_ohlcv(engine, slugs=None):
@@ -429,13 +620,17 @@ def _masked_cov(a, b, mask):
     return c
 
 
-def compute_ratios_vectorised(df):
+def compute_ratios_vectorised(df, dates=None):
     """FE_RATIOS rows for every (target date, slug), from df that already has m_pct_1d.
 
     Same semantics as the per-date/per-slug loop over gcp_dmv_rat's calculate_* functions
     (window, skips, bitcoin benchmark ffill-aligned to each slug's dates, skipna/ddof rules),
     but each target date is one vectorised step over a dense slug x date matrix instead of
     a pandas groupby per slug. Returns None if nothing qualifies.
+
+    dates: the target dates (default: df's). A slug's rows depend only on its own returns,
+    bitcoin's and the target dates, so a batch of slugs plus bitcoin, given every coin's
+    dates, gets exactly the rows the full run would.
     """
     df = df[['slug', 'name', 'timestamp', 'm_pct_1d']]
     dups = df.duplicated(['slug', 'timestamp'], keep='last')
@@ -444,12 +639,15 @@ def compute_ratios_vectorised(df):
         df = df[~dups]
 
     slugs = pd.Index(sorted(df['slug'].unique()))          # groupby('slug') order
-    dates = pd.DatetimeIndex(df['timestamp'].unique()).sort_values()
+    if dates is None:
+        dates = pd.DatetimeIndex(df['timestamp'].unique()).sort_values()
     if RATIO_BENCHMARK not in slugs:
         return None
     S, D = len(slugs), len(dates)
     si = slugs.get_indexer(df['slug'])
     di = dates.get_indexer(df['timestamp'])
+    if (di < 0).any():
+        raise ValueError("df has timestamps that aren't in `dates`")
 
     R = np.full((S, D), np.nan)              # m_pct_1d; NaN = no row or NaN return
     R[si, di] = df['m_pct_1d'].to_numpy(dtype=float)
@@ -556,7 +754,7 @@ def compute_ratios_vectorised(df):
     return ratios_df
 
 
-def phase_ratios(ohlcv_df, engine_bt):
+def phase_ratios(engine_live, engine_bt, all_slugs):
     logger.info("=" * 60)
     logger.info("PHASE 6: Backfilling FE_RATIOS + FE_RATIOS_SIGNALS")
     logger.info("=" * 60)
@@ -566,18 +764,29 @@ def phase_ratios(ohlcv_df, engine_bt):
         generate_binary_signals_ratios
     )
 
-    df = rat_pct_change(ohlcv_df.copy())
-    logger.info(f"  {df['timestamp'].nunique()} unique dates in OHLCV data.")
-    start = time.time()
-    ratios_df = compute_ratios_vectorised(df)
-    if ratios_df is None or ratios_df.empty:
+    dates = fetch_ohlcv_dates(engine_live)
+    logger.info(f"  {len(dates)} unique dates in OHLCV data; {len(all_slugs):,} coins "
+                f"in batches of {BATCH_SLUGS}.")
+    stages = [StagedTable(engine_bt, "FE_RATIOS"), StagedTable(engine_bt, "FE_RATIOS_SIGNALS")]
+    start, total = time.time(), 0
+    for i, batch in enumerate(_batches(all_slugs), 1):
+        # Every batch fetches bitcoin too: it's the benchmark (and never gets a row itself)
+        df = rat_pct_change(fetch_all_ohlcv(engine_live, sorted(set(batch) | {RATIO_BENCHMARK})))
+        ratios_df = compute_ratios_vectorised(df, dates)
+        if ratios_df is None or ratios_df.empty:
+            continue
+        ratios_df = generate_binary_signals_ratios(ratios_df[ratios_df['slug'].isin(batch)])
+        for st in stages:
+            st.add(ratios_df, {"slugs": batch})
+        total += len(ratios_df)
+        logger.info(f"  Batch {i}: {total:,} ratio rows so far ({(time.time() - start) / 60:.1f} min).")
+    if not total:
         logger.warning("  No ratio data computed. Skipping.")
+        for st in stages:
+            st.drop()
         return
-    logger.info(f"  {len(ratios_df)} ratio rows computed in {(time.time() - start) / 60:.1f} minutes.")
-    ratios_df = generate_binary_signals_ratios(ratios_df)
-
-    truncate_and_insert(ratios_df, "FE_RATIOS", engine_bt)
-    truncate_and_insert(ratios_df, "FE_RATIOS_SIGNALS", engine_bt)
+    for st in stages:
+        st.finish()
     logger.info("  Ratios backfill complete.")
 
 
@@ -667,22 +876,31 @@ def compute_metrics(ohlcv_df, date_added):
     return df.drop(columns=['high', 'low', 'close'])
 
 
-def phase_metrics(ohlcv_df, engine_live, engine_bt):
+def phase_metrics(engine_live, engine_bt, all_slugs):
     logger.info("=" * 60)
     logger.info("PHASE 7: Backfilling FE_METRICS + FE_METRICS_SIGNAL")
     logger.info("=" * 60)
 
     date_added = fetch_date_added(engine_live, engine_bt)
-    metrics = compute_metrics(ohlcv_df, date_added)
-    with_listing = metrics['slug'].isin(date_added).groupby(metrics['slug']).first()
-    logger.info(f"  {len(metrics):,} point-in-time rows for {metrics['slug'].nunique():,} coins; "
-                f"{int((~with_listing).sum()):,} coins have no CMC date_added "
-                f"(first OHLCV date used as a lower bound for coin age).")
-
     # The existing rows are the real daily snapshots: keep their values and only fill gaps
     # (their signal columns are NULL, as gcp_dmv_met.py writes FE_METRICS before signals).
-    truncate_and_insert(metrics, "FE_METRICS", engine_bt, prefer_existing=True, guard=True)
-    truncate_and_insert(metrics, "FE_METRICS_SIGNAL", engine_bt, prefer_existing=True, guard=True)
+    stages = [StagedTable(engine_bt, "FE_METRICS", prefer_existing=True, guard=True),
+              StagedTable(engine_bt, "FE_METRICS_SIGNAL", prefer_existing=True, guard=True)]
+    rows = coins = no_listing = 0
+    # Every metric is per coin, so batches of coins give the same rows as one pass
+    for i, batch in enumerate(_batches(all_slugs), 1):
+        metrics = compute_metrics(fetch_all_ohlcv(engine_live, batch), date_added)
+        for st in stages:
+            st.add(metrics, {"slugs": batch})
+        batch_slugs = metrics['slug'].unique()
+        rows, coins = rows + len(metrics), coins + len(batch_slugs)
+        no_listing += int((~pd.Series(batch_slugs).isin(date_added)).sum())
+        logger.info(f"  Batch {i}: {rows:,} rows so far.")
+    logger.info(f"  {rows:,} point-in-time rows for {coins:,} coins; "
+                f"{no_listing:,} coins have no CMC date_added "
+                f"(first OHLCV date used as a lower bound for coin age).")
+    for st in stages:
+        st.finish()
     logger.info("  Metrics backfill complete.")
 
 
@@ -698,27 +916,47 @@ CORE_SIGNAL_TABLES = [
 
 
 def _core_join_chunk(engine_bt, tables, start, end, slugs=None):
-    """FULL OUTER JOIN of the signal tables USING (slug, timestamp) for one time window."""
+    """FULL OUTER JOIN of the signal tables USING (slug, timestamp) for one time window.
+
+    The join runs here, not in Postgres: each table's window is a plain range read on its
+    "timestamp" index, then pandas outer-merges them. On a small RDS instance the 8-way
+    join in SQL ran the server out of memory. Columns come out as SQL's SELECT * ... USING
+    orders them (slug, timestamp, then each table's other columns), except that a name an
+    earlier table already has is skipped: core keeps only the first copy anyway.
+    """
     where = '"timestamp" >= :a AND "timestamp" < :b' + (' AND slug IN :slugs' if slugs else '')
-    parts = [f'(SELECT * FROM "{t}" WHERE {where}) AS t{i}' for i, t in enumerate(tables)]
-    query = text("SELECT * FROM " + " FULL OUTER JOIN ".join(
-        p if i == 0 else f"{p} USING (slug, timestamp)" for i, p in enumerate(parts)))
     params = {"a": start, "b": end}
     if slugs:
-        query = query.bindparams(bindparam("slugs", expanding=True))
         params["slugs"] = list(slugs)
+    keys = ["slug", "timestamp"]
+    out = None
     with engine_bt.connect() as conn:
-        return pd.read_sql_query(query, conn, params=params)
+        for t in tables:
+            query = text(f'SELECT * FROM "{t}" WHERE {where}')
+            if slugs:
+                query = query.bindparams(bindparam("slugs", expanding=True))
+            df = pd.read_sql_query(query, conn, params=params)
+            df = df.loc[:, ~df.columns.duplicated()]
+            # Same key types in every frame, even an empty one, so the merges line up
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+            df["slug"] = df["slug"].astype(object)
+            if out is None:
+                out = df[keys + [c for c in df.columns if c not in keys]]
+                continue
+            new = [c for c in df.columns if c not in out.columns]
+            out = out.merge(df[keys + new], on=keys, how="outer")
+    return out
 
 
-def compute_core(engine_bt, slugs=None, since=None):
-    """FE_DMV_ALL + FE_DMV_SCORES for every (slug, timestamp) any signal table has.
+def iter_core(engine_bt, slugs=None, since=None):
+    """FE_DMV_ALL + FE_DMV_SCORES for every (slug, timestamp) any signal table has, one
+    calendar month at a time: yields (start, end, rows, scores) per non-empty month.
 
     Mirrors gcp_dmv_core.py: FULL OUTER JOIN, drop duplicate columns, fillna(0) (a pillar
     with no row for that key counts as 0), bullish/bearish/neutral = how many of
     columns[4:] equal 1/-1/0 (counted before the 3 new zero columns get values, so
     neutral includes them), then keep FE_DMV_ALL's columns and score each pillar as
-    mean(d_/m_/v_ columns) * 100.
+    mean(d_/m_/v_ columns) * 100. Every value is per row, so months are independent.
     """
     tables = [t for t in CORE_SIGNAL_TABLES if table_columns(engine_bt, t)]
     absent = [t for t in CORE_SIGNAL_TABLES if t not in tables]
@@ -726,11 +964,9 @@ def compute_core(engine_bt, slugs=None, since=None):
         logger.warning(f"  Signal tables missing from cp_backtest, treated as all-0: {absent}")
     dmv_cols = table_columns(engine_bt, "FE_DMV_ALL")
 
-    first_year = 2013 if since is None else pd.Timestamp(since).year
-    edges = [pd.Timestamp(f"{y}-01-01", tz="UTC") for y in range(first_year, pd.Timestamp.now().year + 2)]
-    if since is not None:
-        edges[0] = pd.Timestamp(since, tz="UTC")
-    all_rows, all_scores = [], []
+    first = pd.Timestamp(since if since is not None else "2013-01-01", tz="UTC")
+    last = pd.Timestamp(f"{pd.Timestamp.now().year + 2}-01-01", tz="UTC")
+    edges = [first] + [m for m in pd.date_range(first.replace(day=1), last, freq="MS") if m > first]
     for start, end in zip(edges[:-1], edges[1:]):
         df = _core_join_chunk(engine_bt, tables, start, end, slugs)
         if df.empty:
@@ -753,13 +989,26 @@ def compute_core(engine_bt, slugs=None, since=None):
         for name, prefix in [('Durability_Score', 'd_'), ('Momentum_Score', 'm_'), ('Valuation_Score', 'v_')]:
             pcols = [c for c in df.columns if c.startswith(prefix)]
             pillars[name] = df[pcols].sum(axis=1) / max(len(pcols), 1) * 100
-        all_scores.append(pd.DataFrame({'slug': df['slug'], 'timestamp': df['timestamp'], **pillars}))
-        all_rows.append(df)
+        scores = pd.DataFrame({'slug': df['slug'], 'timestamp': df['timestamp'], **pillars})
         logger.info(f"  {start.date()}..{end.date()}: {len(df):,} rows")
+        yield start, end, df, scores
 
-    if not all_rows:
+
+def compute_core(engine_bt, slugs=None, since=None):
+    """All of iter_core in two DataFrames (holds the whole result; for small runs)."""
+    chunks = list(iter_core(engine_bt, slugs, since))
+    if not chunks:
         return pd.DataFrame(), pd.DataFrame()
-    return pd.concat(all_rows, ignore_index=True), pd.concat(all_scores, ignore_index=True)
+    return (pd.concat([c[2] for c in chunks], ignore_index=True),
+            pd.concat([c[3] for c in chunks], ignore_index=True))
+
+
+def _create_table(df, table_name, engine):
+    logger.info(f"  {table_name} does not exist yet, creating...")
+    safe_chunk = max(1, 65000 // len(df.columns))
+    df.to_sql(table_name, con=engine, if_exists='replace',
+              index=False, method='multi', chunksize=safe_chunk)
+    logger.info(f"  {table_name} created with {len(df)} rows.")
 
 
 def phase_core(engine_bt, slugs=None):
@@ -767,36 +1016,38 @@ def phase_core(engine_bt, slugs=None):
     logger.info("PHASE 8: Backfilling FE_DMV_ALL + FE_DMV_SCORES")
     logger.info("=" * 60)
 
-    df, dmv_scores = compute_core(engine_bt, slugs)
-    if df.empty:
-        logger.warning("  No signal data found. Skipping core.")
+    try:
+        stages = [StagedTable(engine_bt, "FE_DMV_ALL", guard=True),
+                  StagedTable(engine_bt, "FE_DMV_SCORES", guard=True)]
+    except LookupError:
+        # A fresh cp_backtest without these tables: create them from the whole result.
+        df, dmv_scores = compute_core(engine_bt, slugs)
+        if df.empty:
+            logger.warning("  No signal data found. Skipping core.")
+            return
+        for frame, name in [(df, "FE_DMV_ALL"), (dmv_scores, "FE_DMV_SCORES")]:
+            if table_columns(engine_bt, name):
+                truncate_and_insert(frame, name, engine_bt, guard=True)
+            else:
+                _create_table(frame, name, engine_bt)
+        logger.info("  Core backfill complete.")
         return
-    logger.info(f"  {len(df):,} rows for {df['slug'].nunique():,} coins over "
-                f"{df['timestamp'].nunique():,} dates.")
 
-    # FE_DMV_ALL and FE_DMV_SCORES may not exist yet in cp_backtest
-    # Use if_exists='replace' for first creation, then backfill handles future runs.
-    # Only on LookupError (table missing): any other write error has already rolled
-    # back, and replacing the table then would throw its rows away.
-    try:
-        truncate_and_insert(df, "FE_DMV_ALL", engine_bt, guard=True)
-    except LookupError:
-        logger.info("  FE_DMV_ALL does not exist yet, creating...")
-        num_cols = len(df.columns)
-        safe_chunk = max(1, 65000 // num_cols)
-        df.to_sql("FE_DMV_ALL", con=engine_bt, if_exists='replace',
-                  index=False, method='multi', chunksize=safe_chunk)
-        logger.info(f"  FE_DMV_ALL created with {len(df)} rows.")
-
-    try:
-        truncate_and_insert(dmv_scores, "FE_DMV_SCORES", engine_bt, guard=True)
-    except LookupError:
-        logger.info("  FE_DMV_SCORES does not exist yet, creating...")
-        num_cols = len(dmv_scores.columns)
-        safe_chunk = max(1, 65000 // num_cols)
-        dmv_scores.to_sql("FE_DMV_SCORES", con=engine_bt, if_exists='replace',
-                          index=False, method='multi', chunksize=safe_chunk)
-        logger.info(f"  FE_DMV_SCORES created with {len(dmv_scores)} rows.")
+    rows, coins, dates = 0, set(), 0
+    for start, end, df, dmv_scores in iter_core(engine_bt, slugs):
+        stages[0].add(df, {"start": start, "end": end})
+        stages[1].add(dmv_scores, {"start": start, "end": end})
+        rows += len(df)
+        coins.update(df['slug'].unique())
+        dates += df['timestamp'].nunique()
+    if not rows:
+        logger.warning("  No signal data found. Skipping core.")
+        for st in stages:
+            st.drop()
+        return
+    logger.info(f"  {rows:,} rows for {len(coins):,} coins over {dates:,} dates.")
+    for st in stages:
+        st.finish()
     logger.info("  Core backfill complete.")
 
 
@@ -837,9 +1088,15 @@ if __name__ == "__main__":
         help="Let metrics/core rewrites drop existing (slug, timestamp) keys or >5%% of rows "
              "(refused by default)."
     )
+    parser.add_argument(
+        "--batch-size", type=int, default=BATCH_SLUGS,
+        help=f"Coins per batch for ratios and metrics (default {BATCH_SLUGS}); "
+             "lower it to use less memory."
+    )
     args = parser.parse_args()
     DRY_RUN = args.dry_run
     ALLOW_SHRINK = args.allow_shrink
+    BATCH_SLUGS = max(1, args.batch_size)
     slugs = [s.strip() for s in args.slugs.split(",")] if args.slugs else None
     if slugs and not DRY_RUN:
         print("--slugs would TRUNCATE each table down to just those coins; use it with --dry-run.")
@@ -866,8 +1123,8 @@ if __name__ == "__main__":
     # Phase 1: Always diagnose
     phase_diagnose(engine_bt)
 
-    # Fetch OHLCV if any OHLCV-based phase is selected
-    ohlcv_phases = {"momentum", "oscillators", "tvv", "pct", "ratios", "metrics"}
+    # The default phases take all OHLCV at once; ratios and metrics fetch it per batch
+    ohlcv_phases = {"momentum", "oscillators", "tvv", "pct"}
     if ohlcv_phases & set(selected):
         ohlcv_df = fetch_all_ohlcv(engine_live, slugs)
     else:
@@ -881,10 +1138,13 @@ if __name__ == "__main__":
         phase_tvv(ohlcv_df, engine_bt)
     if "pct" in selected:
         phase_pct(ohlcv_df, engine_bt)
-    if "ratios" in selected:
-        phase_ratios(ohlcv_df, engine_bt)
-    if "metrics" in selected:
-        phase_metrics(ohlcv_df, engine_live, engine_bt)
+    ohlcv_df = None
+    if {"ratios", "metrics"} & set(selected):
+        all_slugs = fetch_slugs(engine_live, slugs)
+        if "ratios" in selected:
+            phase_ratios(engine_live, engine_bt, all_slugs)
+        if "metrics" in selected:
+            phase_metrics(engine_live, engine_bt, all_slugs)
     if "core" in selected:
         phase_core(engine_bt, slugs)
 
@@ -897,4 +1157,6 @@ if __name__ == "__main__":
     engine_bt.dispose()
 
     elapsed = (time.time() - overall_start) / 60
-    logger.info(f"BACKFILL COMPLETE in {elapsed:.1f} minutes.")
+    # ru_maxrss is KiB on Linux, bytes on macOS
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (2**20 if sys.platform == "darwin" else 2**10)
+    logger.info(f"BACKFILL COMPLETE in {elapsed:.1f} minutes (peak memory {peak:,.0f} MB).")
