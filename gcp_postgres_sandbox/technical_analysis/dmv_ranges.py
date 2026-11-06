@@ -6,6 +6,7 @@ and the tests.
 
 import logging
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,18 @@ def clamp_to_range(series, low, high, name):
             name, int(out_of_range.sum()), low, high, series.min(), series.max(),
         )
     return series.clip(low, high)
+
+
+def risk_of_ruin(win_rate, n):
+    """Gambler's ruin for unit bets from n units of capital: a probability in 0..1.
+
+    With an edge (win_rate > 0.5) it is ((1 - w) / w) ** n. Without one ruin is
+    certain, and that expression stops being a probability. NaN stays NaN.
+    """
+    win_rate = np.asarray(win_rate, dtype=float)
+    has_edge = win_rate > 0.5
+    loss_odds = np.where(has_edge, (1 - win_rate) / np.where(has_edge, win_rate, 1.0), 1.0)
+    return np.where(np.isnan(win_rate), np.nan, loss_odds ** n)
 
 
 def compute_dmv_scores(df):

@@ -69,7 +69,7 @@ if missing_vars:
 TA_DIR = os.path.join(os.path.dirname(__file__), '..', 'technical_analysis')
 sys.path.insert(0, os.path.abspath(TA_DIR))
 
-from dmv_ranges import compute_dmv_scores  # noqa: E402
+from dmv_ranges import compute_dmv_scores, risk_of_ruin  # noqa: E402
 
 def create_engine_live():
     return create_engine(
@@ -728,8 +728,7 @@ def compute_ratios_vectorised(df, dates=None):
             losses = (r < 0).sum(axis=1)
             win_loss = np.where(losses != 0, wins / losses, np.inf)
             win_rate = wins / n
-            bad_wr = np.isnan(win_rate) | (win_rate == 0) | (win_rate == np.inf)
-            ror = np.where(bad_wr, np.nan, ((1 - win_rate) / win_rate) ** n)
+            ror = risk_of_ruin(win_rate, n)
             gain = np.where(r > 0, r, 0.0).sum(axis=1)
             pain = np.where(r < 0, np.abs(r), 0.0).sum(axis=1)
             gain_to_pain = np.where(pain != 0, gain / pain, np.nan)

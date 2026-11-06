@@ -104,10 +104,10 @@ def calculate_win_rate(group):
 #### **9. Risk of Ruin**
 ```python
 def calculate_risk_of_ruin(group):
-    ror = ((1 - win_rate) / win_rate) ** n
+    ror = risk_of_ruin(win_rate, n)  # dmv_ranges.py
 ```
-- **Definition**: Probability of total portfolio loss
-- **Formula**: Based on win rate and number of periods
+- **Definition**: Probability of total portfolio loss, always 0..1
+- **Formula**: Gambler's ruin. `((1 - w) / w) ** n` when `w > 0.5`, otherwise 1 (ruin is certain without an edge). NULL when the coin has no returns yet.
 - **Risk Management**: Lower ROR = safer investment profile
 
 #### **10. Gain to Pain Ratio**

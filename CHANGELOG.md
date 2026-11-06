@@ -6,6 +6,24 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.2] - 2026-11-06 UTC
+
+### Fixed
+- **Risk of Ruin (`gcp_dmv_rat.py`, `backfill_cp_backtest.py`)**: `((1 - w) / w) ** n` is only a probability when `w > 0.5`; below that it grew without limit (3.9e9 at w = 0.45, n = 110). The new `dmv_ranges.risk_of_ruin` returns 1 when `w <= 0.5`, since ruin is certain without an edge, so `m_rat_ror` is always 0..1. It is NULL when a coin has no returns yet.
+- **Ratio inputs (`gcp_dmv_rat.py`)**: a move from a zero close gave an infinite `m_pct_1d`. It is now NULL, so it can't reach Alpha, Sharpe or Sortino or set their bins.
+
+### Added
+- Range tests for Alpha, Sharpe, Sortino and Risk of Ruin, with hand-worked values and zero-variance and zero-downside series.
+
+### Rationale
+**Why:** `m_rat_ror` is published as a probability, so a value above 1 is impossible (cpio-mcp#3).
+
+### Impact Analysis
+- **Published value**: changes wherever `w < 0.5`, which was 68% of 932 coin-weeks replayed from `pit/frozen_sample_30.parquet` over the 28-day window (old median there about 24,000, maximum 1.2e23). Coins with an edge are unchanged.
+- **`m_rat_ror_bin`**: unchanged except at `w = 0`, which was NULL and is now 1, so the bin goes from 0 to -1 (1 of the 932). Scores otherwise don't move.
+- **Consumers of `m_rat_ror`**: cryptoprism-api `risk.py` (`ror` in risk and compare), `signal_classifier.py:152` via `signals.py`, `tokens.py`; cryptoprism-app `analysis-panel.tsx` and `signal-explorer.tsx`; cpio-ai `datasets/indicators.py`.
+- **cp_backtest**: rows already written keep the old values until a backfill runs.
+
 ## [4.9.1] - 2026-11-06 UTC
 
 ### Fixed

@@ -24,7 +24,10 @@ from gcp_dmv_osc import (
     calculate_adx, calculate_awesome_oscillator, calculate_cci, calculate_macd,
     calculate_trix, calculate_ultimate_oscillator,
 )
-from gcp_dmv_rat import calculate_win_rate
+from gcp_dmv_rat import (
+    calculate_alpha, calculate_pct_change, calculate_risk_of_ruin,
+    calculate_sharpe_ratio, calculate_sortino_ratio, calculate_win_rate,
+)
 from gcp_dmv_tvv import (
     calculate_atr, calculate_cmf, calculate_obv, calculate_vwap,
     generate_binary_signals,
@@ -237,6 +240,113 @@ def test_win_rate_is_a_fraction_of_days():
     group["m_pct_1d"] = [0.01, -0.01, 0.02, 0.03]
 
     assert calculate_win_rate(group)["m_rat_win_rate"] == pytest.approx(0.75)
+
+
+# ── ratios ────────────────────────────────────────────────────────────────
+def with_returns(returns):
+    group = closes([100.0] * len(returns))
+    group["m_pct_1d"] = np.array(returns, dtype=float)
+    return group
+
+
+def returns_with_win_rate(wins, days):
+    return [0.01] * wins + [-0.01] * (days - wins)
+
+
+def ror(returns):
+    return calculate_risk_of_ruin(with_returns(returns))["m_rat_ror"]
+
+
+def test_risk_of_ruin_matches_gamblers_ruin_for_an_edge():
+    # win rate 3/4, stake 4 units: ((1 - 3/4) / (3/4)) ** 4 = (1/3) ** 4
+    assert ror(returns_with_win_rate(3, 4)) == pytest.approx(1 / 81)
+
+
+@pytest.mark.parametrize("wins, days", [(2, 4), (1, 4), (0, 4), (45, 100)])
+def test_risk_of_ruin_is_certain_without_an_edge(wins, days):
+    assert ror(returns_with_win_rate(wins, days)) == 1.0
+
+
+def test_risk_of_ruin_does_not_explode_on_a_long_losing_window():
+    # The live bug: ((1 - w) / w) ** n is 3.9e9 at w = 0.45, n = 110.
+    assert ror(returns_with_win_rate(45, 100) + [0.01, 0.01, -0.01, -0.01, -0.01] * 2) == 1.0
+
+
+def test_risk_of_ruin_is_zero_when_every_day_wins():
+    assert ror([0.01] * 5) == 0.0
+
+
+def test_risk_of_ruin_is_undefined_without_data():
+    # A newly listed coin has no returns yet; that isn't the same as certain ruin.
+    assert np.isnan(ror([np.nan, np.nan]))
+
+
+def sharpe(returns):
+    return calculate_sharpe_ratio(with_returns(returns))["v_rat_sharpe"]
+
+
+def sortino(returns):
+    return calculate_sortino_ratio(with_returns(returns))["v_rat_sortino"]
+
+
+def alpha(returns, benchmark_avg_return):
+    return calculate_alpha(with_returns(returns), benchmark_avg_return)["m_rat_alpha"]
+
+
+def test_sharpe_matches_worked_example():
+    # mean 0.02, sample standard deviation 0.01
+    assert sharpe([0.01, 0.02, 0.03]) == pytest.approx(2.0)
+
+
+def test_sortino_matches_worked_example():
+    # mean 0.0025; the two losing days -0.01 and -0.03 have sample deviation sqrt(2)/100
+    assert sortino([0.02, -0.01, 0.03, -0.03]) == pytest.approx(0.25 / 2 ** 0.5)
+
+
+def test_alpha_matches_worked_example():
+    # mean 0.02 against a benchmark mean of 0.005
+    assert alpha([0.01, 0.02, 0.03], 0.005) == pytest.approx(0.015)
+
+
+@pytest.mark.parametrize("returns", [
+    pytest.param([0.01] * 10, id="zero-variance"),
+    pytest.param([0.0] * 10, id="flat"),
+    pytest.param([0.01, 0.02, 0.03], id="zero-downside"),
+    pytest.param([-0.02, -0.02, 0.01], id="identical-losses"),
+    pytest.param([0.01], id="single-day"),
+    pytest.param([np.nan, np.nan], id="no-data"),
+])
+def test_sharpe_sortino_alpha_are_finite_or_null(returns):
+    for value in (sharpe(returns), sortino(returns), alpha(returns, 0.0)):
+        assert not np.isinf(value)
+
+
+def test_a_move_from_a_zero_close_is_undefined_not_infinite():
+    # A pct change from a zero close divides by zero; it must not reach the ratios.
+    df = calculate_pct_change(bars([(1, 1, 1, 1), (0, 0, 0, 1), (1, 1, 1, 1), (2, 2, 2, 1)]))
+
+    assert not np.isinf(df["m_pct_1d"]).any()
+    assert not np.isinf(calculate_alpha(df, 0.0)["m_rat_alpha"])
+
+
+def window_ratios(df):
+    """One row of ratios per coin over the trailing 28 days, as the daily job does."""
+    df = calculate_pct_change(df.sort_values(["slug", "timestamp"]).reset_index(drop=True))
+    df = df[df["timestamp"] >= df["timestamp"].max() - pd.Timedelta(days=28)]
+    benchmark = df[df["slug"] == "bitcoin"]["m_pct_1d"].mean()
+    return pd.DataFrame([
+        pd.concat([calculate_alpha(g, benchmark), calculate_sharpe_ratio(g),
+                   calculate_sortino_ratio(g), calculate_risk_of_ruin(g)])
+        for _, g in df.groupby("slug")
+    ])
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_ratios_stay_valid_across_synthetic_markets(seed):
+    ratios = window_ratios(synthetic_market(seed))
+
+    assert ratios["m_rat_ror"].between(0, 1).all()
+    assert np.isfinite(ratios[["m_rat_alpha", "v_rat_sharpe", "v_rat_sortino"]]).all().all()
 
 
 # ── DMV scores ────────────────────────────────────────────────────────────
