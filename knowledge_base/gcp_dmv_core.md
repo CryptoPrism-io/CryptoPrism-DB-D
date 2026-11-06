@@ -66,16 +66,10 @@ df = df[[c for c in df.columns if c in fe_dmv_all_cols]]
 Scores are computed via prefix-based column mapping after the schema filter (so raw value columns like `m_dow_support` are already removed and don't pollute the Momentum sum).
 
 ```python
-Durability = df[['slug'] + [c for c in df.columns if c.startswith('d_')]]
-Momentum   = df[['slug'] + [c for c in df.columns if c.startswith('m_')]]
-Valuation  = df[['slug'] + [c for c in df.columns if c.startswith('v_')]]
-
-Durability['Durability_Score'] = Durability.drop('slug', axis=1).sum(axis=1) / (Durability.shape[1] - 1) * 100
-Momentum  ['Momentum_Score']   = Momentum  .drop('slug', axis=1).sum(axis=1) / (Momentum.shape[1] - 1) * 100
-Valuation ['Valuation_Score']  = Valuation .drop('slug', axis=1).sum(axis=1) / (Valuation.shape[1] - 1) * 100
+dmv_scores = pd.concat([df[['slug', 'timestamp']], compute_dmv_scores(df)], axis=1)
 ```
 
-Each score is a normalized 0-100 value (`sum / N-1 * 100`) where N is the number of columns. The denominator auto-scales as new bins land in each bucket.
+`compute_dmv_scores` (`dmv_ranges.py`) gives each score as the mean of its pillar's columns times 100, so each is in **-100..100**. cryptoprism-api maps that to 0..100 with `normalize_dmv`. Inputs must be -1..1: `d_met_ath_month_signal` (stored 0..2) is halved for scoring, and anything still outside -1..1 is clamped with a logged warning. The denominator auto-scales as new bins land in each bucket.
 
 | Score | Prefix | Includes (v4.8.x) |
 |---|---|---|
@@ -98,15 +92,9 @@ Keeps only the most recent timestamp **per slug** rather than a global max. Prev
 - **Write mode (cp_backtest)**: DELETE-by-timestamp + INSERT (accumulates history)
 - **Batching (v4.8.2)**: `method='multi', chunksize=200` -- ~10x faster than the prior row-by-row default
 
-#### FE_DMV_SCORES (Normalized 0-100 scores)
+#### FE_DMV_SCORES (scores in -100..100)
 ```python
-dmv_scores = pd.DataFrame({
-    'slug': df['slug'],
-    'timestamp': df['timestamp'],
-    'Durability_Score': Durability['Durability_Score'],
-    'Momentum_Score':   Momentum['Momentum_Score'],
-    'Valuation_Score':  Valuation['Valuation_Score'],
-})
+dmv_scores = pd.concat([df[['slug', 'timestamp']], compute_dmv_scores(df)], axis=1)
 dmv_scores.to_sql('FE_DMV_SCORES', con=gcp_engine, if_exists='append',
                   index=False, method='multi', chunksize=BATCH_SIZE)
 ```

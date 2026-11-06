@@ -69,6 +69,8 @@ if missing_vars:
 TA_DIR = os.path.join(os.path.dirname(__file__), '..', 'technical_analysis')
 sys.path.insert(0, os.path.abspath(TA_DIR))
 
+from dmv_ranges import compute_dmv_scores  # noqa: E402
+
 def create_engine_live():
     return create_engine(
         f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
@@ -985,11 +987,7 @@ def iter_core(engine_bt, slugs=None, since=None):
         if dmv_cols:
             df = df[[c for c in df.columns if c in dmv_cols]]
 
-        pillars = {}
-        for name, prefix in [('Durability_Score', 'd_'), ('Momentum_Score', 'm_'), ('Valuation_Score', 'v_')]:
-            pcols = [c for c in df.columns if c.startswith(prefix)]
-            pillars[name] = df[pcols].sum(axis=1) / max(len(pcols), 1) * 100
-        scores = pd.DataFrame({'slug': df['slug'], 'timestamp': df['timestamp'], **pillars})
+        scores = pd.concat([df[['slug', 'timestamp']], compute_dmv_scores(df)], axis=1)
         logger.info(f"  {start.date()}..{end.date()}: {len(df):,} rows")
         yield start, end, df, scores
 

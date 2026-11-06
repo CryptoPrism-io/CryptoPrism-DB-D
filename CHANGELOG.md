@@ -6,6 +6,32 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.1] - 2026-11-06 UTC
+
+### Fixed
+- **VWAP (`gcp_dmv_tvv.py`)**: `cum_price_volume` was `cumsum(typical_price) * cumsum(volume)`, so dividing by `cum_volume` returned the running sum of typical prices (about 8.2M for BTC over the 110-day window). It is now `cumsum(typical_price * volume)`, the published formula.
+- **CMF (`gcp_dmv_tvv.py`)**: the 21-day numerator summed the cumulative A/D line instead of each bar's money flow volume (BTC 5.18). It now sums per-bar money flow. A flat bar (high == low) contributes 0 instead of NaN or infinity. The multiplier and the final CMF are clamped with a logged warning, for vendor bars with a close outside high/low.
+- **TSI (`gcp_dmv_mom.py`, `gcp_dmv_mom_backtest.py`)**: the denominator was a signed EMA of price change, which crosses zero on a reversal (BTC 217). It is now Blau's double-smoothed price change over double-smoothed absolute price change. The second smoothing pass ran across coin boundaries and is now per coin.
+- **Durability (`gcp_dmv_core.py`, `backfill_cp_backtest.py`)**: `d_met_ath_month_signal` sits on a 0..2 scale but was averaged as a -1..1 input, allowing scores up to 110 (BTC 102.4). The new `dmv_ranges.compute_dmv_scores` halves it for scoring only and clamps every input to -1..1 with a logged warning.
+
+### Added
+- `technical_analysis/dmv_ranges.py`: shared `clamp_to_range` and `compute_dmv_scores`.
+- `gcp_postgres_sandbox/tests/test_indicator_ranges.py`: offline range tests with hand-worked expected values.
+- `pytest.ini` and `requirements-dev.txt`: offline test runner. Run `python -m pytest` from the repo root.
+
+### Rationale
+**Why:** the developer product (cpio-mcp#3) must never serve an impossible value. Each case was a formula bug, so each formula was fixed; clamps only cover bad vendor bars and floating-point noise.
+
+`FE_DMV_SCORES` stays on -100..100 because cryptoprism-api's `normalize_dmv` maps it to 0..100. `d_met_ath_month_signal` keeps its stored 0..2 scale because News-Fetcher reads it as an ML feature and FE_DMV_ALL's bullish/bearish counts include it.
+
+### Impact Analysis
+- **Durability_Score**: each coin moves by `-(100 - months_since_ath) / 10` points: about -9 at a recent ATH, 0 at 100 months, positive beyond that. Screener `min_durability` filters see this.
+- **m_tvv_cmf**: now the sign of the 21-day flow rather than of the running A/D line. It flipped on 29% of 922 coin-weeks (19 coins, 2025-08 to 2026-08) replayed from `pit/frozen_sample_30.parquet`. Each flip moves Momentum_Score by 5.26 points and shifts bullish/bearish counts by one.
+- **News-Fetcher ML**: `m_tvv_cmf` and the DMV scores are model features and their distributions change. Check before relying on existing models.
+- **cp_backtest**: rows already written keep the old values until a backfill runs, so history has a break at the first run of this version.
+- **PIT shadow**: `pit/regenerate.py` calls these functions, so a rerun no longer reproduces the `cp011_pit_v2` frozen `m_tvv_cmf` bins.
+- Risk: Medium. No schema or workflow change.
+
 ## [4.9.0] - 2026-05-14 UTC
 
 ### Changed

@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from dmv_ranges import compute_dmv_scores
+
 BATCH_SIZE = 10000
 
 logging.basicConfig(
@@ -105,21 +107,7 @@ with gcp_engine.connect() as conn:
 df.to_sql('FE_DMV_ALL', con=gcp_engine, if_exists='append', index=False, method='multi', chunksize=200)
 logger.info("FE_DMV_ALL uploaded.")
 
-Durability = df[['slug'] + [c for c in df.columns if c.startswith('d_')]]
-Momentum = df[['slug'] + [c for c in df.columns if c.startswith('m_')]]
-Valuation = df[['slug'] + [c for c in df.columns if c.startswith('v_')]]
-
-Durability['Durability_Score'] = Durability.drop('slug', axis=1).sum(axis=1) / (Durability.shape[1] - 1) * 100
-Momentum['Momentum_Score'] = Momentum.drop('slug', axis=1).sum(axis=1) / (Momentum.shape[1] - 1) * 100
-Valuation['Valuation_Score'] = Valuation.drop('slug', axis=1).sum(axis=1) / (Valuation.shape[1] - 1) * 100
-
-dmv_scores = pd.DataFrame({
-    'slug': df['slug'],
-    'timestamp': df['timestamp'],
-    'Durability_Score': Durability['Durability_Score'],
-    'Momentum_Score': Momentum['Momentum_Score'],
-    'Valuation_Score': Valuation['Valuation_Score']
-})
+dmv_scores = pd.concat([df[['slug', 'timestamp']], compute_dmv_scores(df)], axis=1)
 
 df = df.loc[df.groupby('slug')['timestamp'].idxmax()]
 print(f"✅ Per-slug latest timestamp filtered. {df.shape[0]} slugs retained.")

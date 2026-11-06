@@ -176,8 +176,8 @@ metrics['d_pct_cum_ret_signal'] = np.where(metrics['d_pct_cum_ret'] > 0, 1, -1)
 ```python
 metrics['d_met_ath_month_signal'] = ((100 - metrics['d_met_ath_month']) * 2)/100
 ```
-- **Logic**: Recent ATH (lower month count) = Lower signal score
-- **Range**: 0-2 scale (older ATH = higher score)
+- **Logic**: Recent ATH (lower month count) = Higher signal score
+- **Range**: 2 at a fresh ATH, 0 at 100 months, negative beyond that. Halved when it feeds `Durability_Score` (see `dmv_ranges.py`).
 - **Application**: Contrarian valuation indicator
 
 ##### **Market Cap Signals**
