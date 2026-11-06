@@ -4,7 +4,11 @@ import logging
 from sqlalchemy import create_engine, text
 import time
 import os
+import sys
 from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'technical_analysis'))
+from dmv_ranges import clamp_to_range  # noqa: E402
 
 # 🔹 Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -164,7 +168,8 @@ def calculate_tsi(df, short_period=13, long_period=25):
         return smoothed.groupby(df['slug']).transform(lambda x: x.ewm(span=short_period, adjust=False).mean())
 
     # Same formula as technical_analysis/gcp_dmv_mom.py
-    df['m_mom_tsi'] = 100 * double_smooth(delta) / double_smooth(delta.abs())
+    tsi = 100 * double_smooth(delta) / double_smooth(delta.abs())
+    df['m_mom_tsi'] = clamp_to_range(tsi, -100, 100, "TSI")
     return df
 
 # 🔹 Calculate 1 Day Percentage Change

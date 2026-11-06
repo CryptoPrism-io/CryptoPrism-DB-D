@@ -167,6 +167,8 @@ def calculate_cmf(df, period=21):
     # Money flow multiplier: -1..1 while the close is inside the bar. A flat bar has
     # no range to place the close in, so it carries no money flow.
     bar_range = df["high"] - df["low"]
+    if (bar_range < 0).any():
+        logging.warning(f"CMF: {int((bar_range < 0).sum())} bar(s) with high below low carry no money flow")
     multiplier = (df["close"] - df["low"] - (df["high"] - df["close"])) / bar_range.where(bar_range > 0)
     multiplier = clamp_to_range(multiplier, -1, 1, "CMF money flow multiplier").fillna(0)
 

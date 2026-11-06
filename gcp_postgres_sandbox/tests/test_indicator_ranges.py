@@ -121,6 +121,14 @@ def test_cmf_clamps_and_warns_when_the_close_is_outside_the_bar(caplog):
     assert "CMF money flow multiplier" in caplog.text
 
 
+def test_cmf_warns_on_a_bar_with_high_below_low(caplog):
+    with caplog.at_level(logging.WARNING):
+        df = calculate_cmf(bars([(10, 0, 10, 100), (4, 6, 5, 100)]), period=2)
+
+    assert df["CMF"].tolist() == pytest.approx([1.0, 0.5])
+    assert "high below low" in caplog.text
+
+
 def test_cmf_signal_follows_recent_flow_not_flow_since_the_window_opened():
     # 100 days of selling then a month of buying: recent money flow is positive even
     # though the running A/D line is still deeply negative.
@@ -173,7 +181,8 @@ def test_tsi_does_not_inherit_state_from_the_previous_coin():
     second = closes([50, 51, 49, 52, 53, 51, 54], "solana")
     alone = calculate_tsi(second.copy())["m_mom_tsi"]
 
-    together = pd.concat([closes([9000 + i for i in range(30)]), second], ignore_index=True)
+    # The previous coin's step must differ from solana's first move, or a leak is invisible.
+    together = pd.concat([closes([9000 + 7 * i for i in range(30)]), second], ignore_index=True)
     after_another = calculate_tsi(together)
     after_another = after_another[after_another["slug"] == "solana"]["m_mom_tsi"]
 

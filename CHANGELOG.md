@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Range tests for Alpha, Sharpe, Sortino and Risk of Ruin, with hand-worked values and zero-variance and zero-downside series.
+- `.github/workflows/PYTEST.yml`: runs the offline tests on pull requests. No schedule, no secrets, no database, `contents: read`.
+
+### Changed
+- `calculate_cmf` logs a warning for bars with high below low instead of zeroing them silently.
+- `gcp_dmv_mom_backtest.py` clamps TSI the same way as `gcp_dmv_mom.py`.
+- The TSI coin-leak test now uses a prior coin whose step differs from the next coin's first move. The old version passed against the old formula.
 
 ### Rationale
 **Why:** `m_rat_ror` is published as a probability, so a value above 1 is impossible (cpio-mcp#3).
@@ -23,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`m_rat_ror_bin`**: unchanged except at `w = 0`, which was NULL and is now 1, so the bin goes from 0 to -1 (1 of the 932). Scores otherwise don't move.
 - **Consumers of `m_rat_ror`**: cryptoprism-api `risk.py` (`ror` in risk and compare), `signal_classifier.py:152` via `signals.py`, `tokens.py`; cryptoprism-app `analysis-panel.tsx` and `signal-explorer.tsx`; cpio-ai `datasets/indicators.py`.
 - **cp_backtest**: rows already written keep the old values until a backfill runs.
+- Commit: `a36c38a`
 
 ## [4.9.1] - 2026-11-06 UTC
 
@@ -44,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Impact Analysis
 - **Durability_Score**: each coin moves by `-(100 - months_since_ath) / 10` points: about -9 at a recent ATH, 0 at 100 months, positive beyond that. Screener `min_durability` filters see this.
-- **m_tvv_cmf**: now the sign of the 21-day flow rather than of the running A/D line. It flipped on 29% of 922 coin-weeks (19 coins, 2025-08 to 2026-08) replayed from `pit/frozen_sample_30.parquet`. Each flip moves Momentum_Score by 5.26 points and shifts bullish/bearish counts by one.
+- **m_tvv_cmf**: now the sign of the 21-day flow rather than of the running A/D line. It flipped on 29% of 922 coin-weeks (19 coins, 2025-08 to 2026-08) replayed from `pit/frozen_sample_30.parquet`. Each flip moves Momentum_Score by 5.26 points and shifts bullish/bearish counts by one. On CryptoScore that is about 0.8 points at Momentum's 30% weight, or 1.3 at the 50% weight used when a coin has no on-chain score.
 - **News-Fetcher ML**: `m_tvv_cmf` and the DMV scores are model features and their distributions change. Check before relying on existing models.
 - **cp_backtest**: rows already written keep the old values until a backfill runs, so history has a break at the first run of this version.
 - **PIT shadow**: `pit/regenerate.py` calls these functions, so a rerun no longer reproduces the `cp011_pit_v2` frozen `m_tvv_cmf` bins.
