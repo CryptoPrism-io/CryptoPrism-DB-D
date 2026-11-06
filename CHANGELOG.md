@@ -30,7 +30,7 @@ Replayed on 922 coin-weeks (19 coins, 2025-08 to 2026-08) from `pit/frozen_sampl
 ## [4.9.2] - 2026-11-06 UTC
 
 ### Fixed
-- **Risk of Ruin (`gcp_dmv_rat.py`, `backfill_cp_backtest.py`)**: `((1 - w) / w) ** n` is only a probability when `w > 0.5`; below that it grew without limit (3.9e9 at w = 0.45, n = 110). The new `dmv_ranges.risk_of_ruin` returns 1 when `w <= 0.5`, since ruin is certain without an edge, so `m_rat_ror` is always 0..1. It is NULL when a coin has no returns yet.
+- **Risk of Ruin (`gcp_dmv_rat.py`, `backfill_cp_backtest.py`)**: `((1 - w) / w) ** n` is only a probability when `w > 0.5`; below that it grew without limit (3.9e9 at w = 0.45, n = 110). The new `dmv_ranges.risk_of_ruin` returns 1 when `w <= 0.5`, since ruin is certain without an edge, so `m_rat_ror` is always 0..1. It is NULL when a coin has no returns yet, in the daily job and the backfill alike.
 - **Ratio inputs (`gcp_dmv_rat.py`)**: a move from a zero close gave an infinite `m_pct_1d`. It is now NULL, so it can't reach Alpha, Sharpe or Sortino or set their bins.
 
 ### Added
@@ -50,7 +50,7 @@ Replayed on 922 coin-weeks (19 coins, 2025-08 to 2026-08) from `pit/frozen_sampl
 - **`m_rat_ror_bin`**: unchanged except at `w = 0`, which was NULL and is now 1, so the bin goes from 0 to -1 (1 of the 932). Scores otherwise don't move.
 - **Consumers of `m_rat_ror`**: cryptoprism-api `risk.py` (`ror` in risk and compare), `signal_classifier.py:152` via `signals.py`, `tokens.py`; cryptoprism-app `analysis-panel.tsx` and `signal-explorer.tsx`; cpio-ai `datasets/indicators.py`.
 - **cp_backtest**: rows already written keep the old values until a backfill runs.
-- Commit: `a36c38a`
+- Commits: `a36c38a` (Risk of Ruin, ratio inputs, ratio tests); `16dcdb1` (PYTEST workflow, CMF warning, backtest TSI clamp, TSI leak test). The backfill no-returns fix is filled in at merge.
 
 ## [4.9.1] - 2026-11-06 UTC
 

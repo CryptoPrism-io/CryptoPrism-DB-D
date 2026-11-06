@@ -728,7 +728,8 @@ def compute_ratios_vectorised(df, dates=None):
             losses = (r < 0).sum(axis=1)
             win_loss = np.where(losses != 0, wins / losses, np.inf)
             win_rate = wins / n
-            ror = risk_of_ruin(win_rate, n)
+            # No returns in the window is no data, not certain ruin
+            ror = np.where(valid.any(axis=1), risk_of_ruin(win_rate, n), np.nan)
             gain = np.where(r > 0, r, 0.0).sum(axis=1)
             pain = np.where(r < 0, np.abs(r), 0.0).sum(axis=1)
             gain_to_pain = np.where(pain != 0, gain / pain, np.nan)

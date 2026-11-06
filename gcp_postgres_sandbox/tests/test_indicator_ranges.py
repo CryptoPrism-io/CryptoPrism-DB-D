@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from backfill_cp_backtest import compute_ratios_vectorised
 from dmv_ranges import compute_dmv_scores
 from gcp_dmv_mom import (
     calculate_cmo, calculate_rsi, calculate_roc, calculate_smi, calculate_tsi,
@@ -303,6 +304,28 @@ def test_risk_of_ruin_is_zero_when_every_day_wins():
 def test_risk_of_ruin_is_undefined_without_data():
     # A newly listed coin has no returns yet; that isn't the same as certain ruin.
     assert np.isnan(ror([np.nan, np.nan]))
+
+
+def test_backfill_risk_of_ruin_matches_the_daily_job():
+    # Same cases as the daily job, through the backfill's vectorised path.
+    dates = pd.date_range("2026-01-01", periods=6, freq="D")
+    coins = {
+        "bitcoin": [0.01] * 6,
+        "no-returns": [np.nan] * 6,
+        "no-edge": [0.01, -0.01, -0.01, -0.01, 0.01, -0.01],
+        "edge": [0.01, 0.01, 0.01, 0.01, 0.01, -0.01],
+    }
+    df = pd.concat([
+        pd.DataFrame({"slug": slug, "name": slug, "timestamp": dates, "m_pct_1d": returns})
+        for slug, returns in coins.items()
+    ], ignore_index=True)
+
+    ratios = compute_ratios_vectorised(df)
+    last = ratios[ratios["timestamp"] == dates[-1]].set_index("slug")["m_rat_ror"]
+
+    assert np.isnan(last["no-returns"])
+    assert last["no-edge"] == 1.0
+    assert last["edge"] == pytest.approx((1 / 5) ** 6)  # w = 5/6 over 6 days
 
 
 def sharpe(returns):
