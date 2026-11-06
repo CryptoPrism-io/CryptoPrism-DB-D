@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cp_backtest**: rows already written keep the old values until a backfill runs, so history has a break at the first run of this version.
 - **PIT shadow**: `pit/regenerate.py` calls these functions, so a rerun no longer reproduces the `cp011_pit_v2` frozen `m_tvv_cmf` bins.
 - Risk: Medium. No schema or workflow change.
+- Commit: `7a6090d`
 
 ## [4.9.0] - 2026-05-14 UTC
 
