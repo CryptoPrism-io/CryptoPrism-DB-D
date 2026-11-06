@@ -6,6 +6,27 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.3] - 2026-11-06 UTC
+
+### Fixed
+- **ADX (`gcp_dmv_osc.py`)**: `+DM` and `-DM` used an ungrouped `shift(1)`, so each coin's first row compared against the last row of the previous coin in the frame. Wilder smoothing then carried that jump through the window (one coin read ADX 15.3 alone and 99.96 after a pricier coin). The shift is now per coin.
+
+### Audit
+Every `shift`, `diff`, `pct_change`, `rolling`, `ewm` and cumulative call in `technical_analysis/gcp_dmv_*.py`, `gcp_dmv_mom_backtest.py` and `backfill_cp_backtest.py` was checked. Those four lines were the only unguarded ones left; the TSI smoothing leak was fixed in 4.9.1.
+
+### Rationale
+**Why:** the result depended on which coin sorted before this one, which is meaningless. This goes beyond cpio-mcp#3's named columns, so it is a separate commit and can be taken or dropped alone.
+
+### Impact Analysis
+Replayed on 922 coin-weeks (19 coins, 2025-08 to 2026-08) from `pit/frozen_sample_30.parquet`, using 110-day windows:
+- **ADX**: median change 4.8, 90th percentile 67.8, maximum 90.0. 83% of rows moved by more than 1.
+- **`m_osc_adx_bin`**: changed on 26% of rows: 166 by one step and 75 by two.
+- **Momentum_Score**: 2.63 points per step, so up to 5.26; mean absolute shift 0.90 across all rows.
+- **CryptoScore**: about 0.4 per step at Momentum's 30% weight, up to 0.8; up to 1.3 at the 50% weight.
+- The size of the shift depends on price gaps between neighbouring slugs, so the live universe will differ from this sample.
+- **Also affected**: bullish/bearish counts, News-Fetcher features that use the bin, and PIT reruns, which no longer reproduce the frozen `m_osc_adx_bin`. cp_backtest history keeps old values until a backfill.
+- Risk: Medium. No schema or workflow change.
+
 ## [4.9.2] - 2026-11-06 UTC
 
 ### Fixed

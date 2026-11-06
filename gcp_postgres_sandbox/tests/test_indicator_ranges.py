@@ -195,6 +195,21 @@ def test_tsi_of_a_flat_market_is_undefined_not_infinite():
     assert tsi.isna().all()
 
 
+# ── ADX ───────────────────────────────────────────────────────────────────
+def test_adx_does_not_inherit_state_from_the_previous_coin():
+    rng = np.random.default_rng(3)
+    close = 100 * np.exp(np.cumsum(0.02 * rng.standard_normal(60)))
+    second = bars(np.c_[close * 1.01, close * 0.99, close, np.full(60, 1000.0)], "solana")
+    alone = calculate_adx(second.copy())["ADX"]
+
+    # A pricier coin before it: the first +DM/-DM must not span the two coins.
+    pricier = bars([(70000 + 7 * i, 69000 + 7 * i, 69500 + 7 * i, 1000) for i in range(30)])
+    after_another = calculate_adx(pd.concat([pricier, second], ignore_index=True))
+    after_another = after_another[after_another["slug"] == "solana"]["ADX"]
+
+    assert after_another.tolist()[1:] == pytest.approx(alone.tolist()[1:])
+
+
 # ── every published Indicator, across synthetic markets ───────────────────
 def published_indicators(df):
     df = df.sort_values(["slug", "timestamp"]).reset_index(drop=True)
