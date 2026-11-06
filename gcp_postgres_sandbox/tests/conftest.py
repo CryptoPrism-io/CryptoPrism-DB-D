@@ -5,6 +5,8 @@ are forced, not defaulted, so a developer's real credentials can't reach a test.
 """
 
 import os
+import sys
+import types
 
 os.environ.update(
     DB_HOST="offline-test",
@@ -12,3 +14,7 @@ os.environ.update(
     DB_PASSWORD="offline-test",
     GITHUB_ACTIONS="1",
 )
+
+# The backfill imports the POSIX-only `resource` for an end-of-run memory log.
+if sys.platform == "win32":
+    sys.modules.setdefault("resource", types.ModuleType("resource"))
