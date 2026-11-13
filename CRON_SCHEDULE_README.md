@@ -17,6 +17,7 @@ Comprehensive reference for all GitHub Actions workflows, their scheduling, depe
 | **ONCHAIN_BLOCKED** | After DMV | ~07:00-07:30 | Daily | Sequential | ✅ Active |
 | **BACKFILL_CP_BACKTEST** | Manual Only | Manual Only | One-Time | Manual | ⚠️ Manual |
 | **TEST_DEV** | On Push | On Push | Event-Based | Development | 🔧 Dev Only |
+| **PYTEST** | On Pull Request | On Pull Request | Event-Based | CI | ✅ Active |
 
 ---
 
@@ -135,6 +136,13 @@ graph TD
 - **Purpose**: Validate development branch changes
 - **Duration**: ~5-10 minutes
 - **Trigger**: Automatic on push to development branch
+
+### 10. **PYTEST** - Offline Test Suite
+- **File**: `.github/workflows/PYTEST.yml`
+- **Schedule**: `pull_request` only, no cron and no manual dispatch
+- **Primary Script**: `python -m pytest` (see `pytest.ini`)
+- **Purpose**: Run the offline indicator-range and PIT tests on every pull request
+- **Access**: No secrets, no database, `contents: read`
 
 ---
 

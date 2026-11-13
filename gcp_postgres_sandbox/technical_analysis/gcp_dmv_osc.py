@@ -120,10 +120,10 @@ def calculate_adx(df, period=14):
         np.maximum(abs(df['high'] - df['prev_close']), abs(df['low'] - df['prev_close']))
     )
 
-    df['+DM'] = np.where(((df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low'])),
-                        np.maximum(df['high'] - df['high'].shift(1), 0), 0)
-    df['-DM'] = np.where(((df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1))),
-                        np.maximum(df['low'].shift(1) - df['low'], 0), 0)
+    up_move = df['high'] - df.groupby('slug')['high'].shift(1)
+    down_move = df.groupby('slug')['low'].shift(1) - df['low']
+    df['+DM'] = np.where(up_move > down_move, np.maximum(up_move, 0), 0)
+    df['-DM'] = np.where(down_move > up_move, np.maximum(down_move, 0), 0)
 
     # Wilder's Smoothing (EMA) and .assign() within transform, CORRECT NAMING
     df = df.groupby('slug', group_keys=False).apply(lambda x: x.assign(

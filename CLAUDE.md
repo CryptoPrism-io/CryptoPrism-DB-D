@@ -56,6 +56,10 @@ Rscript requirements.R
 
 ### Testing
 ```bash
+# Offline tests (no database): indicator ranges and the PIT layer
+pip install -r requirements-dev.txt
+python -m pytest
+
 # Run backtest data validation tests
 python -m unittest gcp_postgres_sandbox/test_backtest_mom_data.py
 

@@ -7,6 +7,8 @@ from sqlalchemy import create_engine, text
 import os
 from dotenv import load_dotenv
 
+from dmv_ranges import clamp_to_range
+
 # 🔹 Logging setup for debugging and monitoring
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -134,7 +136,7 @@ def calculate_vwap(df):
     logging.info("Calculating VWAP...")
     
     df["typical_price"] = (df["high"] + df["low"] + df["close"]) / 3
-    df["cum_price_volume"] = df.groupby("slug")["typical_price"].cumsum() * df.groupby("slug")["volume"].cumsum()
+    df["cum_price_volume"] = (df["typical_price"] * df["volume"]).groupby(df["slug"]).cumsum()
     df["cum_volume"] = df.groupby("slug")["volume"].cumsum()
     df["VWAP"] = df["cum_price_volume"] / df["cum_volume"]
     
@@ -162,15 +164,22 @@ def calculate_bollinger_bands(df, period=20, num_std=2.0):
 def calculate_cmf(df, period=21):
     logging.info("Calculating CMF & ADL...")
 
-    # Correct ADL Calculation
-    df["ADL"] = ((df["close"] - df["low"] - (df["high"] - df["close"])) / (df["high"] - df["low"])) * df["volume"]
+    # Money flow multiplier: -1..1 while the close is inside the bar. A flat bar has
+    # no range to place the close in, so it carries no money flow.
+    bar_range = df["high"] - df["low"]
+    if (bar_range < 0).any():
+        logging.warning(f"CMF: {int((bar_range < 0).sum())} bar(s) with high below low carry no money flow")
+    multiplier = (df["close"] - df["low"] - (df["high"] - df["close"])) / bar_range.where(bar_range > 0)
+    multiplier = clamp_to_range(multiplier, -1, 1, "CMF money flow multiplier").fillna(0)
 
-    # Cumulative ADL
+    # ADL holds each bar's money flow volume; cum_adl is the running A/D line
+    df["ADL"] = multiplier * df["volume"]
     df["cum_adl"] = df.groupby("slug")["ADL"].cumsum()
 
-    # CMF Calculation
-    df["CMF"] = df.groupby("slug")["cum_adl"].transform(lambda x: x.rolling(period, min_periods=1).sum()) / \
-                df.groupby("slug")["volume"].transform(lambda x: x.rolling(period, min_periods=1).sum())
+    # CMF sums the per-bar money flow over the window, not the running A/D line
+    cmf = df.groupby("slug")["ADL"].transform(lambda x: x.rolling(period, min_periods=1).sum()) / \
+          df.groupby("slug")["volume"].transform(lambda x: x.rolling(period, min_periods=1).sum())
+    df["CMF"] = clamp_to_range(cmf, -1, 1, "CMF")
 
     return df
 

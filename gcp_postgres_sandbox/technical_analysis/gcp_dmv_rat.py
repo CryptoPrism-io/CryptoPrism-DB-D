@@ -6,6 +6,8 @@ import time
 import os
 from dotenv import load_dotenv
 
+from dmv_ranges import risk_of_ruin
+
 # 🔹 Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -78,6 +80,8 @@ WHERE
 def calculate_pct_change(df):
     logging.info("Calculating 1-day percentage change...")
     df['m_pct_1d'] = df.groupby('slug')['close'].transform(lambda x: x.pct_change())
+    # A move from a zero close has no defined percentage
+    df['m_pct_1d'] = df['m_pct_1d'].replace([np.inf, -np.inf], np.nan)
     return df
 
 # 🔹 Define Risk-Free Rate (Centralized Configuration)
@@ -198,13 +202,11 @@ def calculate_win_rate(group):
 # 🔹 Calculate Risk of Ruin (Vectorized)
 def calculate_risk_of_ruin(group):
     logging.info(f"Calculating Risk of Ruin for: {group['slug'].iloc[0]}")
-    win_rate = calculate_win_rate(group)['m_rat_win_rate']
-    if pd.isna(win_rate) or win_rate == 0 or win_rate == np.inf:
-        return pd.Series({'m_rat_ror': np.nan})  # Handle invalid win rates
     returns = group.set_index('timestamp')['m_pct_1d']
-    n = len(returns)
-    ror = ((1 - win_rate) / win_rate) ** n  # Use the calculated win_rate
-    return pd.Series({'m_rat_ror': ror})
+    if returns.count() == 0:
+        return pd.Series({'m_rat_ror': np.nan})  # No returns yet: nothing to measure
+    win_rate = calculate_win_rate(group)['m_rat_win_rate']
+    return pd.Series({'m_rat_ror': float(risk_of_ruin(win_rate, len(returns)))})
 
 # 🔹 Calculate Gain to Pain Ratio (Vectorized)
 def calculate_gain_to_pain(group):

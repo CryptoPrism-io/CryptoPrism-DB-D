@@ -6,6 +6,79 @@ All notable changes to the CryptoPrism-DB project will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.3] - 2026-11-06 UTC
+
+### Fixed
+- **ADX (`gcp_dmv_osc.py`)**: `+DM` and `-DM` used an ungrouped `shift(1)`, so each coin's first row compared against the last row of the previous coin in the frame. Wilder smoothing then carried that jump through the window (one coin read ADX 15.3 alone and 99.96 after a pricier coin). The shift is now per coin.
+
+### Audit
+Every `shift`, `diff`, `pct_change`, `rolling`, `ewm` and cumulative call in `technical_analysis/gcp_dmv_*.py`, `gcp_dmv_mom_backtest.py` and `backfill_cp_backtest.py` was checked. Those four lines were the only unguarded ones left; the TSI smoothing leak was fixed in 4.9.1.
+
+### Rationale
+**Why:** the result depended on which coin sorted before this one, which is meaningless. This goes beyond cpio-mcp#3's named columns, so it is a separate commit and can be taken or dropped alone.
+
+### Impact Analysis
+Replayed on 922 coin-weeks (19 coins, 2025-08 to 2026-08) from `pit/frozen_sample_30.parquet`, using 110-day windows:
+- **ADX**: median change 4.8, 90th percentile 67.8, maximum 90.0. 83% of rows moved by more than 1.
+- **`m_osc_adx_bin`**: changed on 26% of rows: 166 by one step and 75 by two.
+- **Momentum_Score**: 2.63 points per step, so up to 5.26; mean absolute shift 0.90 across all rows.
+- **CryptoScore**: about 0.4 per step at Momentum's 30% weight, up to 0.8; up to 1.3 at the 50% weight.
+- The size of the shift depends on price gaps between neighbouring slugs, so the live universe will differ from this sample.
+- **Also affected**: bullish/bearish counts, News-Fetcher features that use the bin, and PIT reruns, which no longer reproduce the frozen `m_osc_adx_bin`. cp_backtest history keeps old values until a backfill.
+- Risk: Medium. No schema or workflow change.
+
+## [4.9.2] - 2026-11-06 UTC
+
+### Fixed
+- **Risk of Ruin (`gcp_dmv_rat.py`, `backfill_cp_backtest.py`)**: `((1 - w) / w) ** n` is only a probability when `w > 0.5`; below that it grew without limit (3.9e9 at w = 0.45, n = 110). The new `dmv_ranges.risk_of_ruin` returns 1 when `w <= 0.5`, since ruin is certain without an edge, so `m_rat_ror` is always 0..1. It is NULL when a coin has no returns yet, in the daily job and the backfill alike.
+- **Ratio inputs (`gcp_dmv_rat.py`)**: a move from a zero close gave an infinite `m_pct_1d`. It is now NULL, so it can't reach Alpha, Sharpe or Sortino or set their bins.
+
+### Added
+- Range tests for Alpha, Sharpe, Sortino and Risk of Ruin, with hand-worked values and zero-variance and zero-downside series.
+- `.github/workflows/PYTEST.yml`: runs the offline tests on pull requests. No schedule, no secrets, no database, `contents: read`.
+
+### Changed
+- `calculate_cmf` logs a warning for bars with high below low instead of zeroing them silently.
+- `gcp_dmv_mom_backtest.py` clamps TSI the same way as `gcp_dmv_mom.py`.
+- The TSI coin-leak test now uses a prior coin whose step differs from the next coin's first move. The old version passed against the old formula.
+
+### Rationale
+**Why:** `m_rat_ror` is published as a probability, so a value above 1 is impossible (cpio-mcp#3).
+
+### Impact Analysis
+- **Published value**: changes wherever `w < 0.5`, which was 68% of 932 coin-weeks replayed from `pit/frozen_sample_30.parquet` over the 28-day window (old median there about 24,000, maximum 1.2e23). Coins with an edge are unchanged.
+- **`m_rat_ror_bin`**: unchanged except at `w = 0`, which was NULL and is now 1, so the bin goes from 0 to -1 (1 of the 932). Scores otherwise don't move.
+- **Consumers of `m_rat_ror`**: cryptoprism-api `risk.py` (`ror` in risk and compare), `signal_classifier.py:152` via `signals.py`, `tokens.py`; cryptoprism-app `analysis-panel.tsx` and `signal-explorer.tsx`; cpio-ai `datasets/indicators.py`.
+- **cp_backtest**: rows already written keep the old values until a backfill runs.
+- Commits: `a36c38a` (Risk of Ruin, ratio inputs, ratio tests); `16dcdb1` (PYTEST workflow, CMF warning, backtest TSI clamp, TSI leak test). The backfill no-returns fix is filled in at merge.
+
+## [4.9.1] - 2026-11-06 UTC
+
+### Fixed
+- **VWAP (`gcp_dmv_tvv.py`)**: `cum_price_volume` was `cumsum(typical_price) * cumsum(volume)`, so dividing by `cum_volume` returned the running sum of typical prices (about 8.2M for BTC over the 110-day window). It is now `cumsum(typical_price * volume)`, the published formula.
+- **CMF (`gcp_dmv_tvv.py`)**: the 21-day numerator summed the cumulative A/D line instead of each bar's money flow volume (BTC 5.18). It now sums per-bar money flow. A flat bar (high == low) contributes 0 instead of NaN or infinity. The multiplier and the final CMF are clamped with a logged warning, for vendor bars with a close outside high/low.
+- **TSI (`gcp_dmv_mom.py`, `gcp_dmv_mom_backtest.py`)**: the denominator was a signed EMA of price change, which crosses zero on a reversal (BTC 217). It is now Blau's double-smoothed price change over double-smoothed absolute price change. The second smoothing pass ran across coin boundaries and is now per coin.
+- **Durability (`gcp_dmv_core.py`, `backfill_cp_backtest.py`)**: `d_met_ath_month_signal` sits on a 0..2 scale but was averaged as a -1..1 input, allowing scores up to 110 (BTC 102.4). The new `dmv_ranges.compute_dmv_scores` halves it for scoring only and clamps every input to -1..1 with a logged warning.
+
+### Added
+- `technical_analysis/dmv_ranges.py`: shared `clamp_to_range` and `compute_dmv_scores`.
+- `gcp_postgres_sandbox/tests/test_indicator_ranges.py`: offline range tests with hand-worked expected values.
+- `pytest.ini` and `requirements-dev.txt`: offline test runner. Run `python -m pytest` from the repo root.
+
+### Rationale
+**Why:** the developer product (cpio-mcp#3) must never serve an impossible value. Each case was a formula bug, so each formula was fixed; clamps only cover bad vendor bars and floating-point noise.
+
+`FE_DMV_SCORES` stays on -100..100 because cryptoprism-api's `normalize_dmv` maps it to 0..100. `d_met_ath_month_signal` keeps its stored 0..2 scale because News-Fetcher reads it as an ML feature and FE_DMV_ALL's bullish/bearish counts include it.
+
+### Impact Analysis
+- **Durability_Score**: each coin moves by `-(100 - months_since_ath) / 10` points: about -9 at a recent ATH, 0 at 100 months, positive beyond that. Screener `min_durability` filters see this.
+- **m_tvv_cmf**: now the sign of the 21-day flow rather than of the running A/D line. It flipped on 29% of 922 coin-weeks (19 coins, 2025-08 to 2026-08) replayed from `pit/frozen_sample_30.parquet`. Each flip moves Momentum_Score by 5.26 points and shifts bullish/bearish counts by one. On CryptoScore that is about 0.8 points at Momentum's 30% weight, or 1.3 at the 50% weight used when a coin has no on-chain score.
+- **News-Fetcher ML**: `m_tvv_cmf` and the DMV scores are model features and their distributions change. Check before relying on existing models.
+- **cp_backtest**: rows already written keep the old values until a backfill runs, so history has a break at the first run of this version.
+- **PIT shadow**: `pit/regenerate.py` calls these functions, so a rerun no longer reproduces the `cp011_pit_v2` frozen `m_tvv_cmf` bins.
+- Risk: Medium. No schema or workflow change.
+- Commit: `7a6090d`
+
 ## [4.9.0] - 2026-05-14 UTC
 
 ### Changed

@@ -4,7 +4,11 @@ import logging
 from sqlalchemy import create_engine, text
 import time
 import os
+import sys
 from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'technical_analysis'))
+from dmv_ranges import clamp_to_range  # noqa: E402
 
 # 🔹 Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -159,11 +163,13 @@ def calculate_tsi(df, short_period=13, long_period=25):
     logging.info(f"Calculating TSI with short period {short_period} and long period {long_period}")
     delta = df.groupby("slug")["close"].diff()
 
-    smoothed_delta_short = delta.groupby(df['slug']).transform(lambda x: x.ewm(span=short_period, adjust=False).mean())
-    smoothed_delta_long = delta.groupby(df['slug']).transform(lambda x: x.ewm(span=long_period, adjust=False).mean())
+    def double_smooth(series):
+        smoothed = series.groupby(df['slug']).transform(lambda x: x.ewm(span=long_period, adjust=False).mean())
+        return smoothed.groupby(df['slug']).transform(lambda x: x.ewm(span=short_period, adjust=False).mean())
 
-    df['m_mom_tsi'] = 100 * (smoothed_delta_short.ewm(span=short_period, adjust=False).mean() /
-                              smoothed_delta_long.ewm(span=long_period, adjust=False).mean())
+    # Same formula as technical_analysis/gcp_dmv_mom.py
+    tsi = 100 * double_smooth(delta) / double_smooth(delta.abs())
+    df['m_mom_tsi'] = clamp_to_range(tsi, -100, 100, "TSI")
     return df
 
 # 🔹 Calculate 1 Day Percentage Change

@@ -69,6 +69,8 @@ if missing_vars:
 TA_DIR = os.path.join(os.path.dirname(__file__), '..', 'technical_analysis')
 sys.path.insert(0, os.path.abspath(TA_DIR))
 
+from dmv_ranges import compute_dmv_scores, risk_of_ruin  # noqa: E402
+
 def create_engine_live():
     return create_engine(
         f'postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
@@ -726,8 +728,8 @@ def compute_ratios_vectorised(df, dates=None):
             losses = (r < 0).sum(axis=1)
             win_loss = np.where(losses != 0, wins / losses, np.inf)
             win_rate = wins / n
-            bad_wr = np.isnan(win_rate) | (win_rate == 0) | (win_rate == np.inf)
-            ror = np.where(bad_wr, np.nan, ((1 - win_rate) / win_rate) ** n)
+            # No returns in the window is no data, not certain ruin
+            ror = np.where(valid.any(axis=1), risk_of_ruin(win_rate, n), np.nan)
             gain = np.where(r > 0, r, 0.0).sum(axis=1)
             pain = np.where(r < 0, np.abs(r), 0.0).sum(axis=1)
             gain_to_pain = np.where(pain != 0, gain / pain, np.nan)
@@ -985,11 +987,7 @@ def iter_core(engine_bt, slugs=None, since=None):
         if dmv_cols:
             df = df[[c for c in df.columns if c in dmv_cols]]
 
-        pillars = {}
-        for name, prefix in [('Durability_Score', 'd_'), ('Momentum_Score', 'm_'), ('Valuation_Score', 'v_')]:
-            pcols = [c for c in df.columns if c.startswith(prefix)]
-            pillars[name] = df[pcols].sum(axis=1) / max(len(pcols), 1) * 100
-        scores = pd.DataFrame({'slug': df['slug'], 'timestamp': df['timestamp'], **pillars})
+        scores = pd.concat([df[['slug', 'timestamp']], compute_dmv_scores(df)], axis=1)
         logger.info(f"  {start.date()}..{end.date()}: {len(df):,} rows")
         yield start, end, df, scores
 
