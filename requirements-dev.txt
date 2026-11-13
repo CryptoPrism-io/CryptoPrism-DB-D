@@ -1,2 +1,3 @@
 -r requirements.txt
 pytest>=7.0
+pyarrow>=14,<19  # the PIT tests read frozen prices from parquet
