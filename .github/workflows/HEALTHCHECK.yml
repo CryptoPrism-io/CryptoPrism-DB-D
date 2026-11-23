@@ -18,7 +18,7 @@ jobs:
     # While those run on GitHub-hosted runners, this stays on ubuntu-latest.
     # When they move to the self-hosted runner, change this to:
     #     runs-on: [self-hosted, dbcp]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: testsecrets
     steps:
       - uses: actions/checkout@v4
