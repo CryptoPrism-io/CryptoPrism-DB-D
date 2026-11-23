@@ -7,9 +7,15 @@ on:
       - completed
   workflow_dispatch: {}  # Allow manual execution if needed
 
+concurrency:
+  group: daily-pipeline-DMV
+  cancel-in-progress: false
+
 jobs:
   producers:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: testsecrets
     strategy:
       fail-fast: false
@@ -52,22 +58,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+          pip install -r requirements.txt -c constraints.txt
       - name: Run ${{ matrix.name }}
         run: python ${{ matrix.path }}
 
   core:
     needs: producers
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: testsecrets
     env:
       DB_HOST: ${{ secrets.DB_HOST }}
@@ -85,15 +91,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+          pip install -r requirements.txt -c constraints.txt
       - name: Run gcp_dmv_core.py
         run: python gcp_postgres_sandbox/technical_analysis/gcp_dmv_core.py
