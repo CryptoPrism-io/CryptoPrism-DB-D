@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: testsecrets 
 
     steps:
@@ -13,16 +14,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           
       # Install Python packages
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
+          pip install -r requirements.txt -c constraints.txt
       # Run QA Python scripts
       - name: Run all scripts
         env:

@@ -125,6 +125,10 @@ def main() -> None:
         ("crypto_listings_latest_1000", "last_updated"),
         ("1K_coins_ohlcv", "timestamp"),
         ("108_1K_coins_ohlcv", "timestamp"),
+        # DMV outputs the API reads. These froze for 4 days (2026-11-19..22) while
+        # the checks above stayed green, so they are checked too.
+        ("FE_DMV_ALL", "timestamp"),
+        ("FE_DMV_SCORES", "timestamp"),
     ]
     now = datetime.now(timezone.utc)
     problems = []

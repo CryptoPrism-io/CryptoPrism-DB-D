@@ -11,9 +11,15 @@ on:
         description: "Number of days to backfill"
         default: "3"
 
+concurrency:
+  group: daily-pipeline-ONCHAIN_BLOCKED
+  cancel-in-progress: false
+
 jobs:
   refresh-blocked-chains:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: testsecrets
     permissions:
       contents: read
@@ -23,9 +29,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install google-cloud-bigquery psycopg2-binary
