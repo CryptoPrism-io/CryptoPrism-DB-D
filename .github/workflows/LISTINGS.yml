@@ -10,7 +10,7 @@ on:
 
 jobs:
   fetch-crypto-data:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: testsecrets
     
     steps:

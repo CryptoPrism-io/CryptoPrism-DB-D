@@ -9,7 +9,7 @@ on:
 
 jobs:
   producers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: testsecrets
     strategy:
       fail-fast: false
@@ -67,7 +67,7 @@ jobs:
 
   core:
     needs: producers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: testsecrets
     env:
       DB_HOST: ${{ secrets.DB_HOST }}
